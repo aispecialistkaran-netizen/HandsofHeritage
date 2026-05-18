@@ -519,7 +519,7 @@ export default function Home() {
           variants={sectionReveal}
           initial="hidden"
           whileInView="visible"
-          viewport={{ once: true, amount: 0.2 }}
+          viewport={{ once: true, amount: 0 }}
           transition={{ duration: 0.85, ease: 'easeOut' }}
         >
           <div className="section-intro">
@@ -548,7 +548,7 @@ export default function Home() {
           variants={sectionReveal}
           initial="hidden"
           whileInView="visible"
-          viewport={{ once: true, amount: 0.2 }}
+          viewport={{ once: true, amount: 0 }}
           transition={{ duration: 0.85, ease: 'easeOut' }}
         >
           <div className="section-intro">
@@ -599,7 +599,7 @@ export default function Home() {
           variants={sectionReveal}
           initial="hidden"
           whileInView="visible"
-          viewport={{ once: true, amount: 0.2 }}
+          viewport={{ once: true, amount: 0 }}
           transition={{ duration: 0.85, ease: 'easeOut' }}
         >
           <div className="story-copy">
@@ -630,7 +630,7 @@ export default function Home() {
           variants={sectionReveal}
           initial="hidden"
           whileInView="visible"
-          viewport={{ once: true, amount: 0.2 }}
+          viewport={{ once: true, amount: 0 }}
           transition={{ duration: 0.85, ease: 'easeOut' }}
         >
           <div className="story-image" style={{ aspectRatio: '4/3' }}>
@@ -652,7 +652,7 @@ export default function Home() {
           variants={sectionReveal}
           initial="hidden"
           whileInView="visible"
-          viewport={{ once: true, amount: 0.2 }}
+          viewport={{ once: true, amount: 0 }}
           transition={{ duration: 0.85, ease: 'easeOut' }}
         >
           <div className="section-intro">
@@ -681,7 +681,7 @@ export default function Home() {
           variants={sectionReveal}
           initial="hidden"
           whileInView="visible"
-          viewport={{ once: true, amount: 0.2 }}
+          viewport={{ once: true, amount: 0 }}
           transition={{ duration: 0.85, ease: 'easeOut' }}
         >
           <div style={{ textAlign: 'center', marginBottom: '40px' }}>
@@ -708,7 +708,7 @@ export default function Home() {
           variants={sectionReveal}
           initial="hidden"
           whileInView="visible"
-          viewport={{ once: true, amount: 0.2 }}
+          viewport={{ once: true, amount: 0 }}
           transition={{ duration: 0.85, ease: 'easeOut' }}
         >
           <div className="section-intro" style={{ textAlign: 'center' }}>
@@ -747,7 +747,7 @@ export default function Home() {
         variants={sectionReveal}
         initial="hidden"
         whileInView="visible"
-        viewport={{ once: true, amount: 0.2 }}
+        viewport={{ once: true, amount: 0 }}
         transition={{ duration: 0.85, ease: 'easeOut' }}
       >
         <p>(c) 2026 Hands of Heritage. All rights reserved.</p>

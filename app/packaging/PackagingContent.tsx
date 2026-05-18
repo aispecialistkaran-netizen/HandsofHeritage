@@ -80,7 +80,7 @@ export default function PackagingContent() {
           variants={sectionReveal}
           initial="hidden"
           whileInView="visible"
-          viewport={{ once: true, amount: 0.2 }}
+          viewport={{ once: true, amount: 0 }}
           transition={{ duration: 0.85, ease: 'easeOut' }}
         >
           {[
@@ -107,7 +107,7 @@ export default function PackagingContent() {
           variants={sectionReveal}
           initial="hidden"
           whileInView="visible"
-          viewport={{ once: true, amount: 0.2 }}
+          viewport={{ once: true, amount: 0 }}
           transition={{ duration: 0.85, ease: 'easeOut' }}
         >
           <div style={{ textAlign: 'center', marginBottom: '40px' }}>
@@ -141,7 +141,7 @@ export default function PackagingContent() {
           variants={sectionReveal}
           initial="hidden"
           whileInView="visible"
-          viewport={{ once: true, amount: 0.2 }}
+          viewport={{ once: true, amount: 0 }}
           transition={{ duration: 0.85, ease: 'easeOut' }}
         >
           <ProductShelf eyebrow="Packaged products" title="Pieces commonly built into gift-ready sets" items={packagingSamples} />
