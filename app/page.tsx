@@ -370,6 +370,12 @@ export default function Home() {
     return () => clearTimeout(timer);
   }, []);
 
+  useEffect(() => {
+    const handleOpenDrawer = () => setDrawerOpen(true);
+    window.addEventListener('open-quote-drawer', handleOpenDrawer);
+    return () => window.removeEventListener('open-quote-drawer', handleOpenDrawer);
+  }, []);
+
   const filteredProducts = useMemo(
     () =>
       activeFilter === 'all'
