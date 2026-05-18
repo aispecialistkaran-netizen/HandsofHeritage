@@ -1,0 +1,801 @@
+
+<style>
+  @import url('https://fonts.googleapis.com/css2?family=Cormorant+Garamond:ital,wght@0,300;0,400;0,500;1,300;1,400&family=Jost:wght@300;400;500&display=swap');
+
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+
+  .hoh-wrap {
+    font-family: 'Jost', sans-serif;
+    font-weight: 300;
+    background: #F7F4EF;
+    color: #2C2416;
+    min-height: 100vh;
+    overflow: hidden;
+  }
+
+  /* NAV */
+  .hoh-nav {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 20px 40px;
+    background: #F7F4EF;
+    border-bottom: 0.5px solid #C8A882;
+  }
+  .hoh-logo {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+  }
+  .hoh-logo-icon {
+    width: 32px;
+    height: 32px;
+  }
+  .hoh-logo-text {
+    font-family: 'Cormorant Garamond', serif;
+    font-size: 15px;
+    font-weight: 500;
+    letter-spacing: 0.12em;
+    text-transform: uppercase;
+    color: #2C2416;
+    line-height: 1.2;
+  }
+  .hoh-logo-text span { display: block; }
+  .hoh-nav-links {
+    display: flex;
+    gap: 32px;
+    list-style: none;
+    font-size: 12px;
+    letter-spacing: 0.1em;
+    text-transform: uppercase;
+    color: #6B5230;
+  }
+  .hoh-nav-links li { cursor: pointer; }
+  .hoh-nav-links li:hover { color: #B5632A; }
+  .hoh-nav-cta {
+    font-size: 11px;
+    letter-spacing: 0.12em;
+    text-transform: uppercase;
+    padding: 9px 20px;
+    border: 0.5px solid #B5632A;
+    color: #B5632A;
+    cursor: pointer;
+    background: transparent;
+  }
+  .hoh-nav-cta:hover { background: #B5632A; color: #F7F4EF; }
+
+  /* HERO */
+  .hoh-hero {
+    position: relative;
+    padding: 80px 40px 60px;
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 60px;
+    align-items: center;
+    overflow: hidden;
+  }
+  .hoh-hero::before {
+    content: '';
+    position: absolute;
+    top: -60px; right: -60px;
+    width: 320px; height: 320px;
+    border-radius: 50%;
+    background: rgba(181,99,42,0.06);
+    pointer-events: none;
+  }
+  .hoh-hero-eyebrow {
+    font-size: 10px;
+    letter-spacing: 0.2em;
+    text-transform: uppercase;
+    color: #B5632A;
+    margin-bottom: 16px;
+  }
+  .hoh-hero-title {
+    font-family: 'Cormorant Garamond', serif;
+    font-size: 52px;
+    font-weight: 300;
+    line-height: 1.1;
+    color: #1E1710;
+    margin-bottom: 20px;
+  }
+  .hoh-hero-title em {
+    font-style: italic;
+    color: #B5632A;
+  }
+  .hoh-hero-sub {
+    font-size: 14px;
+    line-height: 1.8;
+    color: #6B5230;
+    max-width: 340px;
+    margin-bottom: 36px;
+  }
+  .hoh-hero-paths {
+    display: flex;
+    gap: 12px;
+  }
+  .hoh-path-btn {
+    padding: 14px 28px;
+    font-family: 'Jost', sans-serif;
+    font-size: 11px;
+    font-weight: 400;
+    letter-spacing: 0.14em;
+    text-transform: uppercase;
+    cursor: pointer;
+    border: 0.5px solid;
+    transition: all 0.2s;
+  }
+  .hoh-path-btn.primary {
+    background: #2A3D2A;
+    color: #E8DCC8;
+    border-color: #2A3D2A;
+  }
+  .hoh-path-btn.primary:hover { background: #1E2E1E; }
+  .hoh-path-btn.secondary {
+    background: transparent;
+    color: #2A3D2A;
+    border-color: #2A3D2A;
+  }
+  .hoh-path-btn.secondary:hover { background: #2A3D2A; color: #E8DCC8; }
+
+  /* hero visual */
+  .hoh-hero-visual {
+    position: relative;
+    height: 380px;
+  }
+  .hoh-product-mosaic {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    grid-template-rows: 1fr 1fr;
+    gap: 8px;
+    height: 100%;
+  }
+  .hoh-mosaic-cell {
+    border-radius: 2px;
+    overflow: hidden;
+    position: relative;
+    background: #E8D9C0;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    flex-direction: column;
+  }
+  .hoh-mosaic-cell.tall { grid-row: span 2; }
+  .hoh-mosaic-icon {
+    font-size: 42px;
+    opacity: 0.5;
+    margin-bottom: 8px;
+  }
+  .hoh-mosaic-label {
+    font-size: 9px;
+    letter-spacing: 0.14em;
+    text-transform: uppercase;
+    color: #6B5230;
+    text-align: center;
+    padding: 0 8px;
+  }
+  .hoh-copper-tag {
+    position: absolute;
+    bottom: 10px; right: 10px;
+    width: 28px; height: 28px;
+    border-radius: 50%;
+    background: rgba(181,99,42,0.15);
+    border: 0.5px solid #B5632A;
+  }
+
+  /* DIVIDER */
+  .hoh-divider {
+    text-align: center;
+    padding: 8px 0 32px;
+    display: flex;
+    align-items: center;
+    gap: 16px;
+    justify-content: center;
+    color: #C8A882;
+    font-size: 11px;
+    letter-spacing: 0.2em;
+    text-transform: uppercase;
+  }
+  .hoh-divider::before, .hoh-divider::after {
+    content: '';
+    flex: 1;
+    max-width: 200px;
+    height: 0.5px;
+    background: #C8A882;
+  }
+
+  /* HOW IT WORKS */
+  .hoh-section { padding: 0 40px 56px; }
+  .hoh-section-label {
+    font-size: 10px;
+    letter-spacing: 0.2em;
+    text-transform: uppercase;
+    color: #B5632A;
+    margin-bottom: 8px;
+  }
+  .hoh-section-title {
+    font-family: 'Cormorant Garamond', serif;
+    font-size: 32px;
+    font-weight: 300;
+    color: #1E1710;
+    margin-bottom: 36px;
+  }
+  .hoh-steps {
+    display: grid;
+    grid-template-columns: repeat(4, 1fr);
+    gap: 1px;
+    background: #C8A882;
+    border: 0.5px solid #C8A882;
+  }
+  .hoh-step {
+    background: #F7F4EF;
+    padding: 28px 20px;
+    position: relative;
+  }
+  .hoh-step-num {
+    font-family: 'Cormorant Garamond', serif;
+    font-size: 36px;
+    font-weight: 300;
+    color: rgba(181,99,42,0.2);
+    line-height: 1;
+    margin-bottom: 12px;
+  }
+  .hoh-step-title {
+    font-size: 12px;
+    font-weight: 500;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    color: #2A3D2A;
+    margin-bottom: 8px;
+  }
+  .hoh-step-desc {
+    font-size: 12px;
+    line-height: 1.7;
+    color: #6B5230;
+  }
+
+  /* CATALOGUE PREVIEW */
+  .hoh-catalogue {
+    padding: 0 40px 56px;
+  }
+  .hoh-cat-header {
+    display: flex;
+    align-items: flex-end;
+    justify-content: space-between;
+    margin-bottom: 28px;
+  }
+  .hoh-view-all {
+    font-size: 11px;
+    letter-spacing: 0.1em;
+    text-transform: uppercase;
+    color: #B5632A;
+    cursor: pointer;
+    border-bottom: 0.5px solid #B5632A;
+    padding-bottom: 2px;
+  }
+  .hoh-product-grid {
+    display: grid;
+    grid-template-columns: repeat(4, 1fr);
+    gap: 16px;
+  }
+  .hoh-product-card {
+    cursor: pointer;
+    position: relative;
+  }
+  .hoh-product-img {
+    width: 100%;
+    aspect-ratio: 1;
+    background: #E8D9C0;
+    margin-bottom: 12px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 36px;
+    border: 0.5px solid #D4BC98;
+    position: relative;
+    overflow: hidden;
+  }
+  .hoh-product-img::after {
+    content: 'Add to quote';
+    position: absolute;
+    bottom: 0; left: 0; right: 0;
+    background: rgba(42,61,42,0.88);
+    color: #E8DCC8;
+    font-size: 10px;
+    letter-spacing: 0.14em;
+    text-transform: uppercase;
+    text-align: center;
+    padding: 10px;
+    transform: translateY(100%);
+    transition: transform 0.22s;
+    font-family: 'Jost', sans-serif;
+  }
+  .hoh-product-card:hover .hoh-product-img::after { transform: translateY(0); }
+  .hoh-product-material {
+    font-size: 9px;
+    letter-spacing: 0.16em;
+    text-transform: uppercase;
+    color: #B5632A;
+    margin-bottom: 4px;
+  }
+  .hoh-product-name {
+    font-family: 'Cormorant Garamond', serif;
+    font-size: 16px;
+    font-weight: 400;
+    color: #1E1710;
+    line-height: 1.3;
+  }
+  .hoh-product-min {
+    font-size: 10px;
+    color: #9A7D52;
+    margin-top: 4px;
+  }
+
+  /* QUOTE BANNER */
+  .hoh-quote-banner {
+    margin: 0 40px 56px;
+    background: #2A3D2A;
+    padding: 48px 60px;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    position: relative;
+    overflow: hidden;
+  }
+  .hoh-quote-banner::before {
+    content: '';
+    position: absolute;
+    right: -40px; top: -40px;
+    width: 200px; height: 200px;
+    border-radius: 50%;
+    border: 0.5px solid rgba(181,99,42,0.3);
+  }
+  .hoh-quote-banner::after {
+    content: '';
+    position: absolute;
+    right: 20px; top: 20px;
+    width: 120px; height: 120px;
+    border-radius: 50%;
+    border: 0.5px solid rgba(181,99,42,0.2);
+  }
+  .hoh-quote-left {}
+  .hoh-quote-eyebrow {
+    font-size: 10px;
+    letter-spacing: 0.2em;
+    text-transform: uppercase;
+    color: #B5632A;
+    margin-bottom: 12px;
+  }
+  .hoh-quote-title {
+    font-family: 'Cormorant Garamond', serif;
+    font-size: 36px;
+    font-weight: 300;
+    color: #E8DCC8;
+    line-height: 1.2;
+    max-width: 380px;
+  }
+  .hoh-quote-title em { font-style: italic; color: #C8A882; }
+  .hoh-quote-btn {
+    padding: 16px 36px;
+    background: #B5632A;
+    color: #F7F4EF;
+    border: none;
+    font-family: 'Jost', sans-serif;
+    font-size: 11px;
+    font-weight: 400;
+    letter-spacing: 0.14em;
+    text-transform: uppercase;
+    cursor: pointer;
+    position: relative;
+    z-index: 1;
+    white-space: nowrap;
+  }
+  .hoh-quote-btn:hover { background: #9A4E1F; }
+
+  /* FOOTER */
+  .hoh-footer {
+    border-top: 0.5px solid #C8A882;
+    padding: 24px 40px;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    font-size: 11px;
+    color: #9A7D52;
+    letter-spacing: 0.06em;
+  }
+  .hoh-footer-right {
+    display: flex;
+    gap: 24px;
+  }
+
+  /* QUOTE BUILDER DRAWER */
+  .hoh-drawer-overlay {
+    display: none;
+    position: fixed;
+    inset: 0;
+    background: rgba(30,23,16,0.5);
+    z-index: 100;
+    align-items: flex-end;
+    justify-content: center;
+  }
+  .hoh-drawer-overlay.open { display: flex; }
+  .hoh-drawer {
+    background: #F7F4EF;
+    border-top: 0.5px solid #C8A882;
+    width: 100%;
+    max-width: 680px;
+    padding: 32px 40px;
+    position: relative;
+  }
+  .hoh-drawer-title {
+    font-family: 'Cormorant Garamond', serif;
+    font-size: 24px;
+    font-weight: 300;
+    color: #1E1710;
+    margin-bottom: 4px;
+  }
+  .hoh-drawer-sub {
+    font-size: 12px;
+    color: #9A7D52;
+    margin-bottom: 24px;
+  }
+  .hoh-drawer-items {
+    display: flex;
+    gap: 12px;
+    flex-wrap: wrap;
+    margin-bottom: 24px;
+  }
+  .hoh-drawer-item {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 8px 14px;
+    border: 0.5px solid #C8A882;
+    background: #EDE4D5;
+    font-size: 11px;
+    color: #2C2416;
+    letter-spacing: 0.04em;
+  }
+  .hoh-drawer-item-remove {
+    cursor: pointer;
+    color: #B5632A;
+    font-size: 14px;
+    line-height: 1;
+  }
+  .hoh-drawer-form {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 12px;
+    margin-bottom: 16px;
+  }
+  .hoh-input {
+    padding: 10px 14px;
+    border: 0.5px solid #C8A882;
+    background: transparent;
+    font-family: 'Jost', sans-serif;
+    font-size: 12px;
+    color: #2C2416;
+    outline: none;
+    width: 100%;
+  }
+  .hoh-input::placeholder { color: #9A7D52; }
+  .hoh-input:focus { border-color: #B5632A; }
+  .hoh-submit {
+    grid-column: span 2;
+    padding: 14px;
+    background: #2A3D2A;
+    color: #E8DCC8;
+    border: none;
+    font-family: 'Jost', sans-serif;
+    font-size: 11px;
+    font-weight: 400;
+    letter-spacing: 0.14em;
+    text-transform: uppercase;
+    cursor: pointer;
+  }
+  .hoh-drawer-close {
+    position: absolute;
+    top: 28px; right: 36px;
+    font-size: 20px;
+    cursor: pointer;
+    color: #6B5230;
+    background: none;
+    border: none;
+  }
+
+  .hoh-quote-count {
+    display: none;
+    position: absolute;
+    top: -6px; right: -6px;
+    width: 16px; height: 16px;
+    border-radius: 50%;
+    background: #B5632A;
+    color: #fff;
+    font-size: 9px;
+    align-items: center;
+    justify-content: center;
+    font-family: 'Jost', sans-serif;
+  }
+  .hoh-quote-count.show { display: flex; }
+
+  .hoh-nav-quote-wrap { position: relative; }
+
+  /* filter bar */
+  .hoh-filter-bar {
+    display: flex;
+    gap: 8px;
+    margin-bottom: 24px;
+    flex-wrap: wrap;
+  }
+  .hoh-filter-chip {
+    padding: 6px 14px;
+    font-size: 10px;
+    letter-spacing: 0.1em;
+    text-transform: uppercase;
+    border: 0.5px solid #C8A882;
+    color: #6B5230;
+    cursor: pointer;
+    background: transparent;
+    font-family: 'Jost', sans-serif;
+    transition: all 0.15s;
+  }
+  .hoh-filter-chip.active, .hoh-filter-chip:hover {
+    background: #2A3D2A;
+    color: #E8DCC8;
+    border-color: #2A3D2A;
+  }
+</style>
+
+<div class="hoh-wrap">
+  <h2 class="sr-only">Hands of Heritage — premium wedding favours and event gifting website prototype</h2>
+
+  <!-- NAV -->
+  <nav class="hoh-nav">
+    <div class="hoh-logo">
+      <svg class="hoh-logo-icon" viewBox="0 0 40 40" fill="none">
+        <path d="M13 28C13 22 8 20 8 14C8 10 11 8 14 8C16 8 18 9 19 11" stroke="#B5632A" stroke-width="1.5" stroke-linecap="round"/>
+        <path d="M27 28C27 22 32 20 32 14C32 10 29 8 26 8C24 8 22 9 21 11" stroke="#B5632A" stroke-width="1.5" stroke-linecap="round"/>
+        <path d="M14 28C14 24 11 22 11 18" stroke="#2A3D2A" stroke-width="1.5" stroke-linecap="round"/>
+        <path d="M26 28C26 24 29 22 29 18" stroke="#2A3D2A" stroke-width="1.5" stroke-linecap="round"/>
+        <ellipse cx="20" cy="14" rx="6" ry="4" stroke="#B5632A" stroke-width="1.5"/>
+        <path d="M14 28 Q20 34 26 28" stroke="#2A3D2A" stroke-width="1.5" stroke-linecap="round" fill="none"/>
+      </svg>
+      <div class="hoh-logo-text">
+        <span>Hands of</span>
+        <span>Heritage</span>
+      </div>
+    </div>
+    <ul class="hoh-nav-links">
+      <li>Wedding favours</li>
+      <li>Corporate gifts</li>
+      <li>Packaging</li>
+      <li>Gallery</li>
+    </ul>
+    <div class="hoh-nav-quote-wrap">
+      <button class="hoh-nav-cta" onclick="openDrawer()">Request a quote</button>
+      <div class="hoh-quote-count" id="quoteCount">0</div>
+    </div>
+  </nav>
+
+  <!-- HERO -->
+  <section class="hoh-hero">
+    <div>
+      <p class="hoh-hero-eyebrow">Handcrafted gifting from India</p>
+      <h1 class="hoh-hero-title">Gifts that carry<br><em>memory</em> forward</h1>
+      <p class="hoh-hero-sub">A curated collection of handmade Indian gifts for weddings and corporate events. Each piece is crafted by artisans and personalised to your occasion.</p>
+      <div class="hoh-hero-paths">
+        <button class="hoh-path-btn primary" onclick="scrollToCatalogue()">Wedding favours</button>
+        <button class="hoh-path-btn secondary" onclick="scrollToCatalogue()">Corporate gifts</button>
+      </div>
+    </div>
+    <div class="hoh-hero-visual">
+      <div class="hoh-product-mosaic">
+        <div class="hoh-mosaic-cell tall" style="background: linear-gradient(160deg, #E8D5B0, #D4B882);">
+          <div style="font-size:44px; opacity:0.4; margin-bottom:8px;">🪔</div>
+          <div class="hoh-mosaic-label">Brass diyas</div>
+          <div class="hoh-copper-tag"></div>
+        </div>
+        <div class="hoh-mosaic-cell" style="background: linear-gradient(160deg, #D4C4A0, #C4B080);">
+          <div style="font-size:30px; opacity:0.4; margin-bottom:6px;">🏺</div>
+          <div class="hoh-mosaic-label">Copper tumblers</div>
+        </div>
+        <div class="hoh-mosaic-cell" style="background: linear-gradient(160deg, #E0D4C0, #C8BC9C);">
+          <div style="font-size:30px; opacity:0.4; margin-bottom:6px;">🪨</div>
+          <div class="hoh-mosaic-label">Marble coasters</div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <div class="hoh-divider">How it works</div>
+
+  <!-- HOW IT WORKS -->
+  <section class="hoh-section">
+    <div class="hoh-steps">
+      <div class="hoh-step">
+        <div class="hoh-step-num">01</div>
+        <div class="hoh-step-title">Browse</div>
+        <div class="hoh-step-desc">Explore our curated catalogue of handmade Indian gifts across copper, brass, marble and more.</div>
+      </div>
+      <div class="hoh-step">
+        <div class="hoh-step-num">02</div>
+        <div class="hoh-step-title">Select</div>
+        <div class="hoh-step-desc">Add items to your quote basket. No prices — we'll build a tailored package around your brief.</div>
+      </div>
+      <div class="hoh-step">
+        <div class="hoh-step-num">03</div>
+        <div class="hoh-step-title">Consult</div>
+        <div class="hoh-step-desc">We'll get in touch to discuss quantities, customisation, packaging and delivery.</div>
+      </div>
+      <div class="hoh-step">
+        <div class="hoh-step-num">04</div>
+        <div class="hoh-step-title">Receive</div>
+        <div class="hoh-step-desc">Your curated favour set arrives gift-ready, with branding and presentation taken care of.</div>
+      </div>
+    </div>
+  </section>
+
+  <!-- CATALOGUE PREVIEW -->
+  <section class="hoh-catalogue" id="catalogue">
+    <div class="hoh-cat-header">
+      <div>
+        <p class="hoh-section-label">Popular favourites</p>
+        <h2 class="hoh-section-title">Explore the collection</h2>
+      </div>
+      <span class="hoh-view-all">View all products</span>
+    </div>
+
+    <div class="hoh-filter-bar">
+      <button class="hoh-filter-chip active" onclick="filterProducts('all', this)">All</button>
+      <button class="hoh-filter-chip" onclick="filterProducts('copper', this)">Copper</button>
+      <button class="hoh-filter-chip" onclick="filterProducts('brass', this)">Brass</button>
+      <button class="hoh-filter-chip" onclick="filterProducts('marble', this)">Marble</button>
+      <button class="hoh-filter-chip" onclick="filterProducts('wood', this)">Wood</button>
+      <button class="hoh-filter-chip" onclick="filterProducts('fabric', this)">Fabric</button>
+    </div>
+
+    <div class="hoh-product-grid" id="productGrid">
+      <!-- Products injected by JS -->
+    </div>
+  </section>
+
+  <!-- QUOTE BANNER -->
+  <div class="hoh-quote-banner">
+    <div class="hoh-quote-left">
+      <p class="hoh-quote-eyebrow">Bespoke gifting</p>
+      <h2 class="hoh-quote-title">Every favour,<br><em>personally</em> crafted for you</h2>
+    </div>
+    <button class="hoh-quote-btn" onclick="openDrawer()">Request a personalised quote →</button>
+  </div>
+
+  <!-- FOOTER -->
+  <footer class="hoh-footer">
+    <div>© 2026 Hands of Heritage. All rights reserved.</div>
+    <div class="hoh-footer-right">
+      <span>Privacy</span>
+      <span>Terms</span>
+      <span>Instagram</span>
+    </div>
+  </footer>
+
+  <!-- QUOTE DRAWER -->
+  <div class="hoh-drawer-overlay" id="drawerOverlay" onclick="closeDrawerOnOverlay(event)">
+    <div class="hoh-drawer">
+      <button class="hoh-drawer-close" onclick="closeDrawer()">×</button>
+      <h2 class="hoh-drawer-title">Your quote basket</h2>
+      <p class="hoh-drawer-sub">Items you've selected — we'll get in touch with pricing and options.</p>
+      <div class="hoh-drawer-items" id="drawerItems">
+        <p style="font-size:12px; color:#9A7D52; font-style:italic;">No items added yet. Browse the catalogue and click to add items.</p>
+      </div>
+      <div class="hoh-drawer-form">
+        <input class="hoh-input" type="text" placeholder="Your name" />
+        <input class="hoh-input" type="email" placeholder="Email address" />
+        <input class="hoh-input" type="text" placeholder="Event type (e.g. Wedding, Diwali)" />
+        <input class="hoh-input" type="number" placeholder="Approx. guest count" />
+        <button class="hoh-submit" onclick="submitQuote()">Send enquiry →</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script>
+const products = [
+  { id:1, name:'Hammered copper tumbler', material:'Copper', category:'copper', icon:'🥤', min:'Min. 50 units' },
+  { id:2, name:'Lotus brass tealight holder', material:'Brass', category:'brass', icon:'🪔', min:'Min. 30 units' },
+  { id:3, name:'Taj marble coaster set', material:'Marble', category:'marble', icon:'🪨', min:'Min. 25 sets' },
+  { id:4, name:'Potli favour bag', material:'Fabric', category:'fabric', icon:'👜', min:'Min. 100 units' },
+  { id:5, name:'Copper water bottle', material:'Copper', category:'copper', icon:'🏺', min:'Min. 50 units' },
+  { id:6, name:'Wooden jewellery box', material:'Wood', category:'wood', icon:'📦', min:'Min. 20 units' },
+  { id:7, name:'Brass Ganesha figurine', material:'Brass', category:'brass', icon:'🐘', min:'Min. 50 units' },
+  { id:8, name:'Block print cotton scarf', material:'Fabric', category:'fabric', icon:'🧣', min:'Min. 75 units' },
+];
+
+let quoteItems = [];
+let activeFilter = 'all';
+
+function renderProducts(filter) {
+  const grid = document.getElementById('productGrid');
+  const filtered = filter === 'all' ? products : products.filter(p => p.category === filter);
+  grid.innerHTML = filtered.map(p => `
+    <div class="hoh-product-card" onclick="addToQuote(${p.id})">
+      <div class="hoh-product-img">${p.icon}</div>
+      <div class="hoh-product-material">${p.material}</div>
+      <div class="hoh-product-name">${p.name}</div>
+      <div class="hoh-product-min">${p.min}</div>
+    </div>
+  `).join('');
+}
+
+function filterProducts(cat, el) {
+  document.querySelectorAll('.hoh-filter-chip').forEach(c => c.classList.remove('active'));
+  el.classList.add('active');
+  activeFilter = cat;
+  renderProducts(cat);
+}
+
+function addToQuote(id) {
+  const p = products.find(x => x.id === id);
+  if (p && !quoteItems.find(x => x.id === id)) {
+    quoteItems.push(p);
+    updateQuoteCount();
+    renderDrawerItems();
+    openDrawer();
+  }
+}
+
+function removeFromQuote(id) {
+  quoteItems = quoteItems.filter(x => x.id !== id);
+  updateQuoteCount();
+  renderDrawerItems();
+}
+
+function updateQuoteCount() {
+  const el = document.getElementById('quoteCount');
+  if (quoteItems.length > 0) {
+    el.textContent = quoteItems.length;
+    el.classList.add('show');
+  } else {
+    el.classList.remove('show');
+  }
+}
+
+function renderDrawerItems() {
+  const el = document.getElementById('drawerItems');
+  if (quoteItems.length === 0) {
+    el.innerHTML = '<p style="font-size:12px;color:#9A7D52;font-style:italic;">No items added yet. Browse the catalogue and click to add items.</p>';
+    return;
+  }
+  el.innerHTML = quoteItems.map(p => `
+    <div class="hoh-drawer-item">
+      <span>${p.icon}</span>
+      <span>${p.name}</span>
+      <span class="hoh-drawer-item-remove" onclick="removeFromQuote(${p.id})">×</span>
+    </div>
+  `).join('');
+}
+
+function openDrawer() {
+  document.getElementById('drawerOverlay').classList.add('open');
+}
+
+function closeDrawer() {
+  document.getElementById('drawerOverlay').classList.remove('open');
+}
+
+function closeDrawerOnOverlay(e) {
+  if (e.target === document.getElementById('drawerOverlay')) closeDrawer();
+}
+
+function scrollToCatalogue() {
+  document.getElementById('catalogue').scrollIntoView({ behavior: 'smooth' });
+}
+
+function submitQuote() {
+  alert('Thank you! Your enquiry has been submitted. We will be in touch within 24 hours.');
+  closeDrawer();
+  quoteItems = [];
+  updateQuoteCount();
+  renderDrawerItems();
+}
+
+renderProducts('all');
+</script>
