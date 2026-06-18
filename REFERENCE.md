@@ -33,8 +33,9 @@
 
 ## Changes This Document Will Track
 Moving forward, this reference file should be updated to reflect:
-1. **Backend Integration:** Transitioning the static quote submission (`window.alert`) to a real backend endpoint (e.g., sending emails or saving to a database).
+1. **Backend Integration (Done):** Migrated static quote submissions to a serverless real-time database using Google Firebase Firestore. Form submissions from both client components write directly to the `quotes` collection, and the Admin Panel at `/admin` listens to collections in real time using `onSnapshot` to sync analytics metrics and client lists instantly.
 2. **Catalogue Expansion:** Additions or modifications to the product list in `site-content.ts` or migration to a CMS.
 3. **New Pages & Components:** Completion of the remaining subpages (`corporate-gifts`, `packaging`, `gallery`) and any new interactive components.
 4. **Performance & SEO Optimization:** Implementation of metadata, image optimization strategies, and accessibility improvements.
 5. **State Management:** If the quote basket needs to persist across page navigations, tracking the implementation of a global state solution (e.g., React Context or Zustand).
+

@@ -4,6 +4,8 @@ import Image from 'next/image';
 import Link from 'next/link';
 import { AnimatePresence, motion } from 'framer-motion';
 import { useMemo, useState, useEffect } from 'react';
+import { db } from './firebase';
+import { collection, addDoc } from 'firebase/firestore';
 
 type Product = {
   id: number;
@@ -362,6 +364,23 @@ export default function Home() {
   const [drawerOpen, setDrawerOpen] = useState(false);
   const [isLoading, setIsLoading] = useState(true);
 
+  // Form state hooks
+  const [name, setName] = useState('');
+  const [email, setEmail] = useState('');
+  const [phone, setPhone] = useState('');
+  const [eventType, setEventType] = useState('');
+  const [guestCount, setGuestCount] = useState('');
+  const [isSubmitting, setIsSubmitting] = useState(false);
+  const [isSubmitted, setIsSubmitted] = useState(false);
+
+  const closeDrawer = () => {
+    setDrawerOpen(false);
+    // Smooth reset of isSubmitted after drawer slides down
+    setTimeout(() => {
+      setIsSubmitted(false);
+    }, 400);
+  };
+
   useEffect(() => {
     // Hide loader after a smooth 2 seconds
     const timer = setTimeout(() => {
@@ -371,7 +390,10 @@ export default function Home() {
   }, []);
 
   useEffect(() => {
-    const handleOpenDrawer = () => setDrawerOpen(true);
+    const handleOpenDrawer = () => {
+      setIsSubmitted(false);
+      setDrawerOpen(true);
+    };
     window.addEventListener('open-quote-drawer', handleOpenDrawer);
     return () => window.removeEventListener('open-quote-drawer', handleOpenDrawer);
   }, []);
@@ -387,10 +409,12 @@ export default function Home() {
   const addToQuote = (id: number) => {
     const product = products.find((item) => item.id === id);
     if (!product || quoteItems.some((item) => item.id === id)) {
+      setIsSubmitted(false);
       setDrawerOpen(true);
       return;
     }
     setQuoteItems((current) => [...current, product]);
+    setIsSubmitted(false);
     setDrawerOpen(true);
   };
 
@@ -398,10 +422,38 @@ export default function Home() {
     setQuoteItems((current) => current.filter((item) => item.id !== id));
   };
 
-  const submitQuote = () => {
-    window.alert('Thank you! Your enquiry has been received. We will be in touch within 24 hours.');
-    setQuoteItems([]);
-    setDrawerOpen(false);
+  const submitQuote = async () => {
+    if (!name || !email) {
+      window.alert('Please fill in both your name and email address.');
+      return;
+    }
+    setIsSubmitting(true);
+    try {
+      await addDoc(collection(db, 'quotes'), {
+        type: 'basket',
+        name,
+        email,
+        phone,
+        eventType,
+        guestCount: guestCount ? parseInt(guestCount, 10) : 0,
+        createdAt: new Date().toISOString(),
+        status: 'New',
+        items: quoteItems.map((item) => ({
+          name: item.name,
+          material: item.material,
+          category: item.category,
+          image: item.image,
+          min: item.min,
+        })),
+      });
+
+      setIsSubmitted(true);
+    } catch (error) {
+      console.error('Failed to submit quote to Firebase:', error);
+      window.alert('Failed to submit quote. Please check your network connection and try again.');
+    } finally {
+      setIsSubmitting(false);
+    }
   };
 
   return (
@@ -760,42 +812,187 @@ export default function Home() {
 
       <AnimatePresence>
         {drawerOpen && (
-          <motion.div key="drawer-overlay" className="drawer-overlay" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} onClick={() => setDrawerOpen(false)}>
+          <motion.div key="drawer-overlay" className="drawer-overlay" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} onClick={closeDrawer}>
             <motion.div className="drawer-panel" initial={{ y: '100%' }} animate={{ y: 0 }} exit={{ y: '100%' }} transition={{ type: 'spring', stiffness: 220, damping: 22 }} onClick={(event) => event.stopPropagation()}>
-              <button type="button" className="drawer-close" onClick={() => setDrawerOpen(false)}>
+              <button type="button" className="drawer-close" onClick={closeDrawer}>
                 x
               </button>
-              <h2>Your quote basket</h2>
-              <p>Items you have selected, plus our team will follow up with tailored pricing and packaging options.</p>
-              <div className="drawer-items">
-                {quoteItems.length === 0 ? (
-                  <p className="drawer-empty">No items added yet. Select a product to start your quote.</p>
-                ) : (
-                  quoteItems.map((item) => (
-                    <div className="drawer-item" key={item.id}>
-                      <div className="drawer-thumb">
-                        <Image src={item.image} alt={item.name} fill sizes="56px" />
-                      </div>
-                      <div>
-                        <p>{item.name}</p>
-                        <small>{item.material}</small>
-                      </div>
-                      <button type="button" className="drawer-remove" onClick={() => removeFromQuote(item.id)}>
-                        x
-                      </button>
+
+              {isSubmitted ? (
+                <motion.div
+                  key="success-view"
+                  initial={{ opacity: 0, scale: 0.95 }}
+                  animate={{ opacity: 1, scale: 1 }}
+                  transition={{ duration: 0.4 }}
+                  style={{
+                    display: 'flex',
+                    flexDirection: 'column',
+                    alignItems: 'center',
+                    textAlign: 'center',
+                    padding: '30px 10px 10px',
+                    gap: '20px',
+                  }}
+                >
+                  <div
+                    style={{
+                      width: '72px',
+                      height: '72px',
+                      borderRadius: '50%',
+                      backgroundColor: '#fdfbf9',
+                      border: '1.5px dashed #b5632a',
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: 'center',
+                      fontSize: '2.2rem',
+                    }}
+                  >
+                    ✨
+                  </div>
+                  
+                  <div>
+                    <h2 style={{ fontFamily: 'Cormorant Garamond, serif', fontSize: '2.2rem', color: '#251b14', margin: '0 0 8px 0' }}>
+                      Enquiry Received
+                    </h2>
+                    <p style={{ color: '#7c6950', fontSize: '1rem', lineHeight: 1.5, margin: 0, maxWidth: '480px' }}>
+                      Thank you, <strong>{name}</strong>! Your quote request for <strong>{quoteItems.length} {quoteItems.length === 1 ? 'item' : 'items'}</strong> has been safely shared with our curation team.
+                    </p>
+                  </div>
+
+                  <div
+                    style={{
+                      width: '100%',
+                      maxWidth: '440px',
+                      background: '#fffdfa',
+                      border: '1px solid rgba(181, 99, 42, 0.12)',
+                      borderRadius: '16px',
+                      padding: '16px',
+                      display: 'flex',
+                      flexDirection: 'column',
+                      gap: '10px',
+                      textAlign: 'left',
+                    }}
+                  >
+                    <span style={{ fontSize: '0.72rem', textTransform: 'uppercase', letterSpacing: '0.12em', color: '#b5632a', fontWeight: 600 }}>
+                      Curation Request Summary
+                    </span>
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: '8px', maxHeight: '120px', overflowY: 'auto' }}>
+                      {quoteItems.map((item) => (
+                        <div key={item.id} style={{ display: 'flex', alignItems: 'center', gap: '10px', fontSize: '0.9rem' }}>
+                          <div style={{ position: 'relative', width: '32px', height: '32px', borderRadius: '6px', overflow: 'hidden', backgroundColor: '#eadfce', flexShrink: 0 }}>
+                            <Image src={item.image} alt={item.name} fill style={{ objectFit: 'cover' }} />
+                          </div>
+                          <span style={{ color: '#251b14', fontWeight: 500, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                            {item.name}
+                          </span>
+                        </div>
+                      ))}
                     </div>
-                  ))
-                )}
-              </div>
-              <div className="drawer-form">
-                <input type="text" placeholder="Your name" aria-label="Your name" />
-                <input type="email" placeholder="Email address" aria-label="Email address" />
-                <input type="text" placeholder="Event type (e.g. Wedding, Diwali)" aria-label="Event type" />
-                <input type="number" placeholder="Approx. guest count" aria-label="Guest count" />
-                <button type="button" className="drawer-submit" onClick={submitQuote}>
-                  Send enquiry
-                </button>
-              </div>
+                    <div style={{ borderTop: '1px solid rgba(34, 24, 14, 0.06)', paddingTop: '10px', marginTop: '4px', fontSize: '0.82rem', color: '#5f4f3b', display: 'flex', flexDirection: 'column', gap: '4px' }}>
+                      {eventType && <div><strong>Occasion:</strong> {eventType}</div>}
+                      {guestCount && <div><strong>Guest Count:</strong> {guestCount} guests</div>}
+                      <div><strong>Contact Email:</strong> {email}</div>
+                      {phone && <div><strong>Contact Phone:</strong> {phone}</div>}
+                    </div>
+                  </div>
+
+                  <p style={{ fontSize: '0.88rem', color: '#8c7a65', margin: 0, maxWidth: '400px', lineHeight: 1.5 }}>
+                    We will review your event details and respond within 24 hours with custom pricing, packaging previews, and estimated timelines.
+                  </p>
+
+                  <button
+                    type="button"
+                    className="button-primary"
+                    onClick={() => {
+                      setQuoteItems([]);
+                      setName('');
+                      setEmail('');
+                      setPhone('');
+                      setEventType('');
+                      setGuestCount('');
+                      setDrawerOpen(false);
+                      setIsSubmitted(false);
+                    }}
+                    style={{ minWidth: '180px', marginTop: '6px' }}
+                  >
+                    Continue Curation
+                  </button>
+                </motion.div>
+              ) : (
+                <>
+                  <h2>Your quote basket</h2>
+                  <p>Items you have selected, plus our team will follow up with tailored pricing and packaging options.</p>
+                  <div className="drawer-items">
+                    {quoteItems.length === 0 ? (
+                      <p className="drawer-empty">No items added yet. Select a product to start your quote.</p>
+                    ) : (
+                      quoteItems.map((item) => (
+                        <div className="drawer-item" key={item.id}>
+                          <div className="drawer-thumb">
+                            <Image src={item.image} alt={item.name} fill sizes="56px" />
+                          </div>
+                          <div>
+                            <p>{item.name}</p>
+                            <small>{item.material}</small>
+                          </div>
+                          <button type="button" className="drawer-remove" onClick={() => removeFromQuote(item.id)}>
+                            x
+                          </button>
+                        </div>
+                      ))
+                    )}
+                  </div>
+                  <div className="drawer-form">
+                    <input 
+                      type="text" 
+                      placeholder="Your name" 
+                      aria-label="Your name" 
+                      value={name}
+                      onChange={(e) => setName(e.target.value)}
+                      disabled={isSubmitting}
+                    />
+                    <input 
+                      type="email" 
+                      placeholder="Email address" 
+                      aria-label="Email address" 
+                      value={email}
+                      onChange={(e) => setEmail(e.target.value)}
+                      disabled={isSubmitting}
+                    />
+                    <input 
+                      type="tel" 
+                      placeholder="Phone number" 
+                      aria-label="Phone number" 
+                      value={phone}
+                      onChange={(e) => setPhone(e.target.value)}
+                      disabled={isSubmitting}
+                    />
+                    <input 
+                      type="text" 
+                      placeholder="Event type (e.g. Wedding, Diwali)" 
+                      aria-label="Event type" 
+                      value={eventType}
+                      onChange={(e) => setEventType(e.target.value)}
+                      disabled={isSubmitting}
+                    />
+                    <input 
+                      type="number" 
+                      placeholder="Approx. guest count" 
+                      aria-label="Guest count" 
+                      value={guestCount}
+                      onChange={(e) => setGuestCount(e.target.value)}
+                      disabled={isSubmitting}
+                    />
+                    <button 
+                      type="button" 
+                      className="drawer-submit" 
+                      onClick={submitQuote}
+                      disabled={isSubmitting}
+                    >
+                      {isSubmitting ? 'Sending...' : 'Send enquiry'}
+                    </button>
+                  </div>
+                </>
+              )}
             </motion.div>
           </motion.div>
         )}
