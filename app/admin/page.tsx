@@ -59,6 +59,40 @@ export default function AdminDashboard() {
   // Quote ID targeted for custom delete confirmation
   const [quoteToDelete, setQuoteToDelete] = useState<string | null>(null);
 
+  // Admin login states
+  const [username, setUsername] = useState('');
+  const [password, setPassword] = useState('');
+  const [isLoggedIn, setIsLoggedIn] = useState(false);
+  const [loginError, setLoginError] = useState('');
+
+  // Check sessionStorage on mount to persist session across refreshes
+  useEffect(() => {
+    if (typeof window !== 'undefined') {
+      const logged = sessionStorage.getItem('admin_logged_in');
+      if (logged === 'true') {
+        setIsLoggedIn(true);
+      }
+    }
+  }, []);
+
+  const handleLogin = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (username === 'admin' && password === 'incorrect') {
+      setIsLoggedIn(true);
+      setLoginError('');
+      sessionStorage.setItem('admin_logged_in', 'true');
+    } else {
+      setLoginError('Invalid administrator credentials.');
+    }
+  };
+
+  const handleLogout = () => {
+    setIsLoggedIn(false);
+    sessionStorage.removeItem('admin_logged_in');
+    setUsername('');
+    setPassword('');
+  };
+
   // Placeholder for manual refresh triggers
   const fetchQuotes = () => {
     console.log('Firebase subscription is active and syncing automatically.');
@@ -249,6 +283,149 @@ export default function AdminDashboard() {
     };
   }, [quotes]);
 
+  if (!isLoggedIn) {
+    return (
+      <div 
+        style={{ 
+          minHeight: '100vh', 
+          backgroundColor: '#251b14', // Sleek dark mode heritage background
+          color: '#f7f0e8',
+          fontFamily: 'system-ui, -apple-system, sans-serif',
+          display: 'flex',
+          flexDirection: 'column',
+          alignItems: 'center',
+          justifyContent: 'center',
+          padding: '20px',
+          background: 'radial-gradient(circle at center, #36281e 0%, #17110d 100%)'
+        }}
+      >
+        <div 
+          style={{ 
+            width: '100%', 
+            maxWidth: '400px', 
+            backgroundColor: 'rgba(54, 40, 30, 0.45)', 
+            backdropFilter: 'blur(10px)',
+            border: '1px solid rgba(197, 182, 165, 0.15)',
+            borderRadius: '16px',
+            padding: '40px',
+            boxShadow: '0 24px 64px rgba(0,0,0,0.5)',
+            display: 'flex',
+            flexDirection: 'column',
+            alignItems: 'center',
+            gap: '24px'
+          }}
+        >
+          {/* Logo */}
+          <div style={{ textAlign: 'center' }}>
+            <Image src="/logohoh.png" alt="Hands of Heritage logo" width={64} height={58} style={{ filter: 'brightness(1.1)' }} />
+            <h1 style={{ margin: '12px 0 4px 0', fontFamily: 'Georgia, serif', fontSize: '1.6rem', fontWeight: 'normal', letterSpacing: '2px', color: '#f7f0e8' }}>
+              Hands of Heritage
+            </h1>
+            <span style={{ fontSize: '0.8rem', color: '#c5b6a5', letterSpacing: '1px' }}>ADMIN CONSOLE</span>
+          </div>
+
+          {/* Form */}
+          <form onSubmit={handleLogin} style={{ width: '100%', display: 'flex', flexDirection: 'column', gap: '20px' }}>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
+              <label htmlFor="username-input" style={{ fontSize: '0.82rem', color: '#c5b6a5', fontWeight: 500, letterSpacing: '0.5px' }}>Username</label>
+              <input
+                id="username-input"
+                type="text"
+                placeholder="Enter admin username"
+                value={username}
+                onChange={(e) => setUsername(e.target.value)}
+                required
+                style={{
+                  width: '100%',
+                  padding: '12px 16px',
+                  backgroundColor: 'rgba(23, 17, 13, 0.6)',
+                  border: '1px solid rgba(197, 182, 165, 0.3)',
+                  borderRadius: '8px',
+                  color: '#fff',
+                  fontSize: '0.95rem',
+                  outline: 'none',
+                  transition: 'border-color 0.2s'
+                }}
+                onFocus={(e) => (e.currentTarget.style.borderColor = '#b5632a')}
+                onBlur={(e) => (e.currentTarget.style.borderColor = 'rgba(197, 182, 165, 0.3)')}
+              />
+            </div>
+
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
+              <label htmlFor="password-input" style={{ fontSize: '0.82rem', color: '#c5b6a5', fontWeight: 500, letterSpacing: '0.5px' }}>Password</label>
+              <input
+                id="password-input"
+                type="password"
+                placeholder="Enter password"
+                value={password}
+                onChange={(e) => setPassword(e.target.value)}
+                required
+                style={{
+                  width: '100%',
+                  padding: '12px 16px',
+                  backgroundColor: 'rgba(23, 17, 13, 0.6)',
+                  border: '1px solid rgba(197, 182, 165, 0.3)',
+                  borderRadius: '8px',
+                  color: '#fff',
+                  fontSize: '0.95rem',
+                  outline: 'none',
+                  transition: 'border-color 0.2s'
+                }}
+                onFocus={(e) => (e.currentTarget.style.borderColor = '#b5632a')}
+                onBlur={(e) => (e.currentTarget.style.borderColor = 'rgba(197, 182, 165, 0.3)')}
+              />
+            </div>
+
+            {/* Error Message */}
+            {loginError && (
+              <div 
+                style={{ 
+                  color: '#fc8181', 
+                  fontSize: '0.85rem', 
+                  backgroundColor: 'rgba(229, 62, 62, 0.15)', 
+                  border: '1px solid rgba(229, 62, 62, 0.2)',
+                  borderRadius: '6px', 
+                  padding: '10px 14px',
+                  lineHeight: 1.4,
+                  textAlign: 'left'
+                }}
+              >
+                ⚠️ {loginError}
+              </div>
+            )}
+
+            {/* Submit */}
+            <button
+              type="submit"
+              style={{
+                width: '100%',
+                padding: '12px',
+                backgroundColor: '#b5632a',
+                color: '#fff',
+                border: 'none',
+                borderRadius: '8px',
+                fontSize: '0.95rem',
+                fontWeight: 600,
+                cursor: 'pointer',
+                transition: 'background-color 0.2s, transform 0.1s'
+              }}
+              onMouseEnter={(e) => (e.currentTarget.style.backgroundColor = '#9a5120')}
+              onMouseLeave={(e) => (e.currentTarget.style.backgroundColor = '#b5632a')}
+              onMouseDown={(e) => (e.currentTarget.style.transform = 'scale(0.98)')}
+              onMouseUp={(e) => (e.currentTarget.style.transform = 'scale(1)')}
+            >
+              Sign In
+            </button>
+          </form>
+        </div>
+
+        <Link href="/" style={{ marginTop: '24px', color: '#c5b6a5', fontSize: '0.9rem', textDecoration: 'none', transition: 'color 0.2s' }} onMouseEnter={(e) => (e.currentTarget.style.color = '#fff')} onMouseLeave={(e) => (e.currentTarget.style.color = '#c5b6a5')}>
+          ← Return to Live Store
+        </Link>
+      </div>
+    );
+  }
+
   return (
     <div className="admin-layout" style={{ minHeight: '100vh', backgroundColor: '#fdfbfa', color: '#251b14', fontFamily: 'system-ui, -apple-system, sans-serif' }}>
       {/* Header */}
@@ -260,9 +437,19 @@ export default function AdminDashboard() {
             <span style={{ fontSize: '0.8rem', color: '#c5b6a5', letterSpacing: '0.5px' }}>QUOTE ENQUIRY ADMIN PANEL</span>
           </div>
         </div>
-        <Link href="/" style={{ color: '#f7f0e8', textDecoration: 'none', border: '1px solid #c5b6a5', padding: '8px 16px', borderRadius: '4px', fontSize: '0.9rem', transition: 'all 0.2s' }}>
-          Back to Live Site
-        </Link>
+        <div style={{ display: 'flex', gap: '12px', alignItems: 'center' }}>
+          <Link href="/" style={{ color: '#f7f0e8', textDecoration: 'none', border: '1px solid #c5b6a5', padding: '8px 16px', borderRadius: '4px', fontSize: '0.9rem', transition: 'all 0.2s' }}>
+            Back to Live Site
+          </Link>
+          <button
+            onClick={handleLogout}
+            style={{ backgroundColor: 'transparent', border: '1px solid #c53030', color: '#fc8181', padding: '8px 16px', borderRadius: '4px', fontSize: '0.9rem', cursor: 'pointer', transition: 'all 0.2s' }}
+            onMouseEnter={(e) => (e.currentTarget.style.backgroundColor = '#c53030')}
+            onMouseLeave={(e) => (e.currentTarget.style.backgroundColor = 'transparent')}
+          >
+            Logout
+          </button>
+        </div>
       </header>
 
       {/* Tabs Menu */}
