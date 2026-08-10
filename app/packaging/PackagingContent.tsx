@@ -3,10 +3,11 @@
 import Image from 'next/image';
 import Link from 'next/link';
 import { motion } from 'framer-motion';
-import { ProductShelf } from '../components/ProductShelf';
 import { SiteFooter } from '../components/SiteFooter';
 import { SiteHeader } from '../components/SiteHeader';
 import { pickItems } from '../site-content';
+import { useQuote } from '../context/QuoteContext';
+import { ProductCard } from '../components/ProductCard';
 
 const packagingSamples = pickItems([
   'Copper tea light holder',
@@ -32,6 +33,8 @@ const sectionReveal = {
 };
 
 export default function PackagingContent() {
+  const { openDrawer } = useQuote();
+
   return (
     <div className="page-shell">
       <SiteHeader activeHref="/packaging" />
@@ -51,11 +54,11 @@ export default function PackagingContent() {
               custom silk ribbons, wax seals, and personalized inserts that make each handcrafted item feel extraordinarily complete on arrival.
             </p>
             <div className="hero-actions" style={{ marginTop: '32px' }}>
-              <Link className="button-primary" href="/#products">
-                Choose products
-              </Link>
-              <Link className="button-secondary" href="/corporate-gifts">
-                Corporate sets
+              <button type="button" className="button-primary" onClick={openDrawer}>
+                Request packaging quote
+              </button>
+              <Link className="button-secondary" href="/gallery">
+                Browse catalogue
               </Link>
             </div>
           </div>
@@ -137,15 +140,18 @@ export default function PackagingContent() {
           </div>
         </motion.section>
 
-        <motion.div
-          variants={sectionReveal}
-          initial="hidden"
-          whileInView="visible"
-          viewport={{ once: true, amount: 0 }}
-          transition={{ duration: 0.85, ease: 'easeOut' }}
-        >
-          <ProductShelf eyebrow="Packaged products" title="Pieces commonly built into gift-ready sets" items={packagingSamples} />
-        </motion.div>
+        {/* Products commonly built into gift-ready sets */}
+        <section className="catalogue-section" style={{ maxWidth: '1200px', margin: '0 auto', padding: '40px 20px' }}>
+          <div className="section-intro">
+            <p className="eyebrow">Packaged Products</p>
+            <h2>Pieces Commonly Built into Gift-Ready Sets</h2>
+          </div>
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(260px, 1fr))', gap: '24px' }}>
+            {packagingSamples.map((product) => (
+              <ProductCard key={product.id} product={product} />
+            ))}
+          </div>
+        </section>
 
         <motion.section 
           className="process-section"
@@ -182,22 +188,20 @@ export default function PackagingContent() {
         </motion.section>
 
         <motion.section 
-          className="editorial-band"
+          className="quote-banner"
           variants={sectionReveal}
           initial="hidden"
           whileInView="visible"
           viewport={{ once: true, amount: 0.2 }}
           transition={{ duration: 0.85, ease: 'easeOut' }}
-          style={{ gridTemplateColumns: '1fr', textAlign: 'center', maxWidth: '800px', margin: '80px auto 0' }}
         >
           <div>
             <p className="eyebrow">Finish details</p>
-            <h2 style={{ marginBottom: '24px' }}>Packaging is quoted with the product set</h2>
-            <p style={{ margin: '0 auto' }}>
-              Share quantity, occasion, city, timelines and any colour or branding direction. We will recommend a
-              practical packaging route before production starts.
-            </p>
+            <h2>Packaging is quoted with your product set</h2>
           </div>
+          <button type="button" className="button-primary" onClick={openDrawer}>
+            Request packaging & product quote
+          </button>
         </motion.section>
       </main>
       <SiteFooter />

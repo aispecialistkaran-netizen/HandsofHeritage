@@ -12,6 +12,7 @@ type QuoteItem = {
   category: string;
   image: string;
   min?: string;
+  quantity?: number;
 };
 
 type Quote = {
@@ -24,6 +25,12 @@ type Quote = {
   phone?: string;
   eventType?: string;
   occasion?: string;
+  eventDate?: string;
+  deliveryLocation?: string;
+  packaging?: string;
+  personalisation?: string;
+  budget?: string;
+  notes?: string;
   guestCount?: number;
   quantity?: number;
   city?: string;
@@ -987,6 +994,12 @@ export default function AdminDashboard() {
                           <td style={{ padding: '4px 0', color: '#251b14' }}>{selectedQuote.city}</td>
                         </tr>
                       )}
+                      {selectedQuote.deliveryLocation && (
+                        <tr>
+                          <td style={{ padding: '4px 0', color: '#5f4f3b' }}>Postcode/Country:</td>
+                          <td style={{ padding: '4px 0', color: '#251b14', fontWeight: 500 }}>{selectedQuote.deliveryLocation}</td>
+                        </tr>
+                      )}
                     </tbody>
                   </table>
                 </div>
@@ -995,21 +1008,40 @@ export default function AdminDashboard() {
                   <h3 style={{ margin: '0 0 12px', fontSize: '0.9rem', color: '#8c7d6b', textTransform: 'uppercase', borderBottom: '1px solid rgba(37,27,20,0.06)', paddingBottom: '6px' }}>Event & Gifting details</h3>
                   <table style={{ width: '100%', fontSize: '0.95rem' }}>
                     <tbody>
+                      {selectedQuote.eventDate && (
+                        <tr>
+                          <td style={{ padding: '4px 0', color: '#5f4f3b', width: '130px' }}>Delivery Date:</td>
+                          <td style={{ padding: '4px 0', color: '#251b14', fontWeight: 600 }}>{selectedQuote.eventDate}</td>
+                        </tr>
+                      )}
                       <tr>
-                        <td style={{ padding: '4px 0', color: '#5f4f3b', width: '120px' }}>Occasion/Event:</td>
+                        <td style={{ padding: '4px 0', color: '#5f4f3b', width: '130px' }}>Occasion/Event:</td>
                         <td style={{ padding: '4px 0', color: '#251b14', fontWeight: 500 }}>
                           {selectedQuote.eventType || selectedQuote.occasion || 'General Curation'}
                         </td>
                       </tr>
-                      {selectedQuote.type === 'basket' ? (
+                      {selectedQuote.packaging && (
                         <tr>
-                          <td style={{ padding: '4px 0', color: '#5f4f3b' }}>Guest Count:</td>
-                          <td style={{ padding: '4px 0', color: '#251b14' }}>{selectedQuote.guestCount || 'Not specified'}</td>
+                          <td style={{ padding: '4px 0', color: '#5f4f3b' }}>Packaging:</td>
+                          <td style={{ padding: '4px 0', color: '#b5632a', fontWeight: 500 }}>{selectedQuote.packaging}</td>
                         </tr>
-                      ) : (
+                      )}
+                      {selectedQuote.personalisation && (
                         <tr>
-                          <td style={{ padding: '4px 0', color: '#5f4f3b' }}>Approx Quantity:</td>
-                          <td style={{ padding: '4px 0', color: '#251b14' }}>{selectedQuote.quantity || 'Not specified'}</td>
+                          <td style={{ padding: '4px 0', color: '#5f4f3b' }}>Personalisation:</td>
+                          <td style={{ padding: '4px 0', color: '#251b14' }}>{selectedQuote.personalisation}</td>
+                        </tr>
+                      )}
+                      {selectedQuote.budget && (
+                        <tr>
+                          <td style={{ padding: '4px 0', color: '#5f4f3b' }}>Est. Budget:</td>
+                          <td style={{ padding: '4px 0', color: '#251b14' }}>{selectedQuote.budget}</td>
+                        </tr>
+                      )}
+                      {selectedQuote.notes && (
+                        <tr>
+                          <td style={{ padding: '4px 0', color: '#5f4f3b' }}>Special Notes:</td>
+                          <td style={{ padding: '4px 0', color: '#251b14', fontStyle: 'italic' }}>{selectedQuote.notes}</td>
                         </tr>
                       )}
                       {/* Deal Value Calculation Display */}
@@ -1051,11 +1083,15 @@ export default function AdminDashboard() {
                       <p style={{ margin: 0, fontWeight: 600, fontSize: '0.95rem', color: '#251b14' }}>{item.name}</p>
                       <small style={{ color: '#8c7d6b', fontSize: '0.8rem' }}>Material: {item.material} | Category: {item.category}</small>
                     </div>
-                    {item.min && (
+                    {item.quantity ? (
+                      <span style={{ fontSize: '0.85rem', color: '#b5632a', fontWeight: 700, backgroundColor: '#fdf3ed', padding: '6px 12px', borderRadius: '6px', border: '1px solid rgba(181,99,42,0.2)' }}>
+                        Qty: {item.quantity} units
+                      </span>
+                    ) : item.min ? (
                       <span style={{ fontSize: '0.8rem', color: '#b5632a', fontWeight: 500, backgroundColor: '#fdf3ed', padding: '4px 8px', borderRadius: '4px' }}>
                         {item.min}
                       </span>
-                    )}
+                    ) : null}
                   </div>
                 ))}
               </div>

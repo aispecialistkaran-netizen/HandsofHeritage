@@ -2,15 +2,16 @@
 
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
+import { useQuote } from '../context/QuoteContext';
 
 export function MobileBottomBar() {
   const pathname = usePathname();
+  const { openDrawer, quoteItems } = useQuote();
+  const count = quoteItems.reduce((acc, item) => acc + item.quantity, 0);
 
   const handleQuoteClick = (e: React.MouseEvent<HTMLAnchorElement>) => {
-    if (pathname === '/') {
-      e.preventDefault();
-      window.dispatchEvent(new Event('open-quote-drawer'));
-    }
+    e.preventDefault();
+    openDrawer();
   };
 
   return (
@@ -37,14 +38,14 @@ export function MobileBottomBar() {
         </svg>
         <span>Packaging</span>
       </Link>
-      <Link href="/#products" onClick={handleQuoteClick} className="bottom-tab quote-tab">
+      <a href="#quote" onClick={handleQuoteClick} className="bottom-tab quote-tab" style={{ position: 'relative' }}>
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
           <circle cx="8" cy="21" r="1" />
           <circle cx="19" cy="21" r="1" />
           <path d="M2.05 2.05h2l2.66 12.42a2 2 0 0 0 2 1.58h9.78a2 2 0 0 0 1.95-1.57l1.65-7.43H5.12" />
         </svg>
-        <span>Quote</span>
-      </Link>
+        <span>Quote ({count})</span>
+      </a>
     </nav>
   );
 }

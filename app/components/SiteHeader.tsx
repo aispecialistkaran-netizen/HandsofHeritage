@@ -1,12 +1,18 @@
+'use client';
+
 import Image from 'next/image';
 import Link from 'next/link';
 import { navLinks } from '../site-content';
+import { useQuote } from '../context/QuoteContext';
 
 type SiteHeaderProps = {
   activeHref?: string;
 };
 
 export function SiteHeader({ activeHref }: SiteHeaderProps) {
+  const { quoteItems, openDrawer } = useQuote();
+  const totalCount = quoteItems.reduce((acc, item) => acc + item.quantity, 0);
+
   return (
     <header className="site-header">
       <Link className="brand-mark" href="/" aria-label="Hands of Heritage home">
@@ -26,9 +32,10 @@ export function SiteHeader({ activeHref }: SiteHeaderProps) {
             </li>
           ))}
         </ul>
-        <Link className="nav-cta nav-cta-link" href="/#products">
+        <button type="button" className="nav-cta" onClick={openDrawer}>
           Request a quote
-        </Link>
+          <span className={`quote-count ${totalCount > 0 ? 'visible' : ''}`}>{totalCount}</span>
+        </button>
       </nav>
     </header>
   );

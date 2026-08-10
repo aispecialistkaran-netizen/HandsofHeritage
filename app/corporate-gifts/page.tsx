@@ -1,15 +1,12 @@
-import type { Metadata } from 'next';
+'use client';
+
 import Image from 'next/image';
 import Link from 'next/link';
-import { ProductShelf } from '../components/ProductShelf';
 import { SiteFooter } from '../components/SiteFooter';
 import { SiteHeader } from '../components/SiteHeader';
 import { pickItems } from '../site-content';
-
-export const metadata: Metadata = {
-  title: 'Corporate Gifts | Hands of Heritage',
-  description: 'Premium handcrafted corporate gifting for clients, teams and event delegates.',
-};
+import { useQuote } from '../context/QuoteContext';
+import { ProductCard } from '../components/ProductCard';
 
 const corporatePicks = pickItems([
   'Pure copper water tumbler',
@@ -20,33 +17,27 @@ const corporatePicks = pickItems([
   'Copper keychain',
   'Marble Taj Mahal paperweight',
   'Brass spice spoon',
-  'Brass trinket box',
-  'Brass temple bell',
-  'Marble spice bowl',
-  'Marble candle holder',
-  'Copper incense holder',
-  'Brass elephant figurine',
-  'Marble ring holder',
-  'Mini copper lota pot',
 ]);
 
 export default function CorporateGiftsPage() {
+  const { openDrawer } = useQuote();
+
   return (
     <div className="page-shell">
       <SiteHeader activeHref="/corporate-gifts" />
       <main className="subpage-main">
+        {/* Hero */}
         <section className="subpage-hero">
           <div className="subpage-copy">
             <p className="eyebrow">Corporate gifts</p>
             <h1>Refined gifting for clients, teams and milestone events</h1>
             <p>
-              Choose premium handcrafted pieces for leadership offsites, festive dispatches, onboarding kits and
-              conference gifting. We help balance utility, cultural character and polished presentation.
+              Choose premium handcrafted pieces for leadership offsites, festive dispatches, onboarding kits and conference gifting.
             </p>
             <div className="hero-actions">
-              <Link className="button-primary" href="/#products">
+              <button type="button" className="button-primary" onClick={openDrawer}>
                 Build a gift set
-              </Link>
+              </button>
               <Link className="button-secondary" href="/gallery">
                 Browse gallery
               </Link>
@@ -61,6 +52,7 @@ export default function CorporateGiftsPage() {
           </div>
         </section>
 
+        {/* Streamlined Feature Panels */}
         <section className="detail-grid">
           {[
             ['Client gifting', 'Statement drinkware, desk pieces and keepsakes for premium relationship building.'],
@@ -74,66 +66,34 @@ export default function CorporateGiftsPage() {
           ))}
         </section>
 
-        <section className="story-section">
-          <div className="story-copy">
-            <p className="eyebrow">Program design</p>
-            <h2>Corporate gifting that works across many occasions</h2>
-            <p>
-              A strong corporate gift needs to feel useful, culturally grounded and easy to dispatch at scale. We
-              shortlist products by role, quantity, event timing and presentation format so the final set feels
-              premium without becoming complicated to manage.
-            </p>
-            <div className="story-points">
-              <span>Leadership gifts</span>
-              <span>Festive dispatches</span>
-              <span>Delegate kits</span>
-              <span>Employee milestones</span>
-            </div>
+        {/* Curated Product Shelf */}
+        <section className="catalogue-section" style={{ maxWidth: '1200px', margin: '0 auto', padding: '40px 20px' }}>
+          <div className="section-intro">
+            <p className="eyebrow">Corporate Edit</p>
+            <h2>Gifts Built for Repeated Use</h2>
           </div>
-          <div className="story-image-grid">
-            {corporatePicks.slice(3, 7).map((item) => (
-              <div className="story-image" key={item.name}>
-                <Image src={item.image} alt={item.name} fill sizes="(max-width: 1040px) 50vw, 22vw" />
-              </div>
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(260px, 1fr))', gap: '24px' }}>
+            {corporatePicks.map((product) => (
+              <ProductCard key={product.id} product={product} />
             ))}
+          </div>
+          <div style={{ textAlign: 'center', marginTop: '32px' }}>
+            <Link className="button-secondary" href="/gallery">
+              View All 29 Items in Gallery →
+            </Link>
           </div>
         </section>
 
-        <section className="long-panel">
-          <div>
-            <p className="eyebrow">Use cases</p>
-            <h2>Built for repeat gifting calendars</h2>
-          </div>
-          <div className="matrix-grid">
-            {[
-              ['Festive gifting', 'Copper drinkware, brass decor and marble desk pieces packed as premium seasonal sets.'],
-              ['Leadership offsites', 'Compact keepsakes for retreats, board meetings and annual planning sessions.'],
-              ['Client onboarding', 'Refined gift boxes that introduce a relationship without feeling generic.'],
-              ['Conference counters', 'Fast-moving favour formats for delegates, speakers and VIP guests.'],
-              ['Employee recognition', 'Practical pieces that suit anniversaries, achievements and team celebrations.'],
-              ['International guests', 'Culturally rooted objects that travel well and communicate Indian craft clearly.'],
-            ].map(([title, text]) => (
-              <article className="matrix-card" key={title}>
-                <h3>{title}</h3>
-                <p>{text}</p>
-              </article>
-            ))}
-          </div>
-        </section>
-
-        <ProductShelf eyebrow="Corporate edit" title="Gifts built for repeated use" items={corporatePicks} />
-
+        {/* Streamlined Process Section */}
         <section className="process-section">
           <div className="section-intro">
             <p className="eyebrow">Buying flow</p>
             <h2>From shortlist to dispatch plan</h2>
           </div>
           {[
-            ['01', 'Brief', 'Share occasion, audience, city, approximate quantity and budget range.'],
-            ['02', 'Shortlist', 'We recommend product combinations that match your event tone and operational needs.'],
-            ['03', 'Packaging', 'Box, sleeve, insert and brand treatment are aligned with the selected products.'],
-            ['04', 'Sampling', 'For larger orders, approve a sample or reference set before production.'],
-            ['05', 'Dispatch', 'Production, packing and delivery are planned around your event or campaign calendar.'],
+            ['01', 'Shortlist', 'Choose product combinations matching your event tone and operational needs.'],
+            ['02', 'Packaging', 'Box, sleeve, insert and brand treatment are aligned with the selected products.'],
+            ['03', 'Dispatch', 'Production, packing and delivery are managed smoothly around your schedule.'],
           ].map(([number, title, text]) => (
             <article className="process-row" key={number}>
               <span>{number}</span>
@@ -143,6 +103,7 @@ export default function CorporateGiftsPage() {
           ))}
         </section>
 
+        {/* Quote CTA Banner */}
         <section className="quote-banner">
           <div>
             <p className="eyebrow">Bulk gifting</p>
@@ -150,9 +111,9 @@ export default function CorporateGiftsPage() {
               Make every dispatch feel <em>considered</em>
             </h2>
           </div>
-          <Link className="button-primary" href="/#products">
-            Request options
-          </Link>
+          <button type="button" className="button-primary" onClick={openDrawer}>
+            Request corporate options
+          </button>
         </section>
       </main>
       <SiteFooter />
