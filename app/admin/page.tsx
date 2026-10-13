@@ -84,6 +84,54 @@ const getMockUnitPrice = (material: string): number => {
   }
 };
 
+function ItemThumbnail({ image, name }: { image?: string; name: string }) {
+  const normalizedSrc = (image || '/logohoh.png').replace(/ /g, '_');
+  const [src, setSrc] = useState(normalizedSrc);
+  const [failed, setFailed] = useState(false);
+
+  useEffect(() => {
+    setSrc((image || '/logohoh.png').replace(/ /g, '_'));
+    setFailed(false);
+  }, [image]);
+
+  return (
+    <div
+      style={{
+        position: 'relative',
+        width: '48px',
+        height: '48px',
+        borderRadius: '8px',
+        overflow: 'hidden',
+        flexShrink: 0,
+        backgroundColor: '#f5efe8',
+        border: '1px solid rgba(37,27,20,0.08)',
+        display: 'flex',
+        alignItems: 'center',
+        justifyContent: 'center',
+      }}
+    >
+      {!failed ? (
+        /* Native img prevents Next.js /_next/image 400 parameter errors with spaces */
+        /* eslint-disable-next-line @next/next/no-img-element */
+        <img
+          src={src}
+          alt={name}
+          style={{ width: '100%', height: '100%', objectFit: 'cover' }}
+          onError={() => {
+            if (src !== '/logohoh.png') {
+              setSrc('/logohoh.png');
+            } else {
+              setFailed(true);
+            }
+          }}
+        />
+      ) : (
+        <span style={{ fontSize: '1.2rem', color: '#b5632a' }}>✨</span>
+      )}
+    </div>
+  );
+}
+
 export default function AdminDashboard() {
   const [quotes, setQuotes] = useState<Quote[]>([]);
   const [loading, setLoading] = useState(true);
@@ -1257,9 +1305,7 @@ export default function AdminDashboard() {
                       }}
                     >
                       <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
-                        <div style={{ position: 'relative', width: '48px', height: '48px', borderRadius: '6px', overflow: 'hidden', flexShrink: 0 }}>
-                          <Image src={item.image} alt={item.name} fill style={{ objectFit: 'cover' }} />
-                        </div>
+                        <ItemThumbnail image={item.image} name={item.name} />
                         <div>
                           <strong style={{ fontSize: '0.94rem', color: '#251b14', display: 'block' }}>{item.name}</strong>
                           <small style={{ color: '#7c6950', fontSize: '0.8rem' }}>{item.material} • {item.category}</small>
