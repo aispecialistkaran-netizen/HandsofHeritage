@@ -1,8 +1,8 @@
 export const navLinks = [
   { label: 'Wedding favours', href: '/wedding-favours' },
-  { label: 'Corporate gifts', href: '/corporate-gifts' },
   { label: 'Packaging', href: '/packaging' },
   { label: 'Gallery', href: '/gallery' },
+  { label: 'Corporate gifts', href: '/corporate-gifts' },
 ];
 
 export type Product = {

@@ -28,8 +28,11 @@
 ### 4. Animations and UX
 - **Framer Motion** is deeply integrated for scroll-reveal animations (`sectionReveal`), hover micro-interactions on product cards, and smooth entry/exit animations for the quote drawer.
 
-### 5. Bug Fixes & Stability
-- **Hydration Error Resolution:** Fixed a critical Next.js hydration mismatch on the homepage that caused crashes during development mode. The error stemmed from invalid HTML nesting (block-level elements inside `<button>` tags for product cards). Replaced these with accessible `<div>` tags (`role="button"` and `tabIndex={0}`), securing layout stability and standard compliance without affecting functionality or styling.
+### 6. Business Focus & Narrative Rebalance (Wedding Favours Priority)
+- **Visual & Navigation Hierarchy:** Rebalanced navigation across [SiteHeader.tsx](file:///c:/Users/xMonks/HNDOHH/app/components/SiteHeader.tsx), [page.tsx](file:///c:/Users/xMonks/HNDOHH/app/page.tsx), and [SiteFooter.tsx](file:///c:/Users/xMonks/HNDOHH/app/components/SiteFooter.tsx) to establish Wedding Favours as the primary focus, positioning Corporate Gifts as a clearly partitioned secondary business option.
+- **Hero & Storytelling:** Re-framed homepage copy, imagery, and CTAs (`Explore Wedding Favours` & `Request a Quote`) around wedding celebrations, sacred ceremony keepsakes (diyas, tealights), and welcome room hampers.
+- **Dedicated Secondary Corporate Section:** Embedded a standalone corporate gifting showcase card on the homepage directing B2B and executive clients cleanly to `/corporate-gifts`.
+- **Catalogue Curation:** Curated homepage signature items with 8 premier wedding keepsakes.
 
 ## Changes This Document Will Track
 Moving forward, this reference file should be updated to reflect:

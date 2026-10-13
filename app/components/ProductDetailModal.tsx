@@ -1,14 +1,23 @@
 'use client';
 
 import Image from 'next/image';
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { AnimatePresence, motion } from 'framer-motion';
 import { useQuote } from '../context/QuoteContext';
 
 export function ProductDetailModal() {
   const { activeDetailProduct, closeProductDetail, addToQuote, openDrawer } = useQuote();
   const [selectedImageIndex, setSelectedImageIndex] = useState(0);
-  const [quantity, setQuantity] = useState(1);
+  const [quantity, setQuantity] = useState(50);
+
+  const minMoq = activeDetailProduct?.moq || 50;
+
+  useEffect(() => {
+    if (activeDetailProduct) {
+      setSelectedImageIndex(0);
+      setQuantity(activeDetailProduct.moq || 50);
+    }
+  }, [activeDetailProduct]);
 
   if (!activeDetailProduct) return null;
 
@@ -190,31 +199,44 @@ export function ProductDetailModal() {
 
               {/* Quantity Selector & Add Button */}
               <div style={{ marginTop: 'auto', paddingTop: '12px', borderTop: '1px solid rgba(0,0,0,0.06)' }}>
-                <div style={{ display: 'flex', alignItems: 'center', gap: '12px', marginBottom: '12px' }}>
-                  <label htmlFor="modal-qty" style={{ fontSize: '0.88rem', fontWeight: 600, color: '#251b14' }}>
-                    Est. Quantity:
-                  </label>
-                  <div style={{ display: 'flex', alignItems: 'center', border: '1px solid rgba(34,24,14,0.2)', borderRadius: '8px', overflow: 'hidden' }}>
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '6px', marginBottom: '14px' }}>
+                  <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                    <label htmlFor="modal-qty" style={{ fontSize: '0.88rem', fontWeight: 600, color: '#251b14' }}>
+                      Units Required:
+                    </label>
+                    <span style={{ fontSize: '0.78rem', color: '#b5632a', fontWeight: 600 }}>
+                      Min. order {minMoq} units
+                    </span>
+                  </div>
+                  <div style={{ display: 'flex', alignItems: 'center', border: '1px solid rgba(34,24,14,0.2)', borderRadius: '8px', overflow: 'hidden', width: 'fit-content' }}>
                     <button
                       type="button"
-                      onClick={() => setQuantity((q) => Math.max(1, q - 1))}
-                      style={{ padding: '6px 12px', background: '#f5efe8', border: 'none', cursor: 'pointer', fontWeight: 600 }}
+                      onClick={() => setQuantity((q) => Math.max(minMoq, q - 10))}
+                      disabled={quantity <= minMoq}
+                      style={{ padding: '8px 14px', background: '#f5efe8', border: 'none', cursor: quantity <= minMoq ? 'not-allowed' : 'pointer', fontWeight: 700, opacity: quantity <= minMoq ? 0.5 : 1 }}
+                      aria-label="Decrease units by 10"
                     >
-                      -
+                      -10
                     </button>
                     <input
                       id="modal-qty"
                       type="number"
+                      min={minMoq}
+                      step={10}
                       value={quantity}
-                      onChange={(e) => setQuantity(Math.max(1, parseInt(e.target.value, 10) || 1))}
-                      style={{ width: '60px', textAlign: 'center', border: 'none', padding: '6px', fontSize: '0.9rem' }}
+                      onChange={(e) => {
+                        const val = parseInt(e.target.value, 10);
+                        setQuantity(isNaN(val) ? minMoq : Math.max(minMoq, val));
+                      }}
+                      style={{ width: '80px', textAlign: 'center', border: 'none', padding: '8px', fontSize: '0.95rem', fontWeight: 600, color: '#251b14' }}
                     />
                     <button
                       type="button"
-                      onClick={() => setQuantity((q) => q + 1)}
-                      style={{ padding: '6px 12px', background: '#f5efe8', border: 'none', cursor: 'pointer', fontWeight: 600 }}
+                      onClick={() => setQuantity((q) => q + 10)}
+                      style={{ padding: '8px 14px', background: '#f5efe8', border: 'none', cursor: 'pointer', fontWeight: 700 }}
+                      aria-label="Increase units by 10"
                     >
-                      +
+                      +10
                     </button>
                   </div>
                 </div>
@@ -224,17 +246,17 @@ export function ProductDetailModal() {
                     type="button"
                     className="button-secondary"
                     onClick={handleAdd}
-                    style={{ flex: 1, padding: '12px', fontSize: '0.9rem' }}
+                    style={{ flex: 1, padding: '12px', fontSize: '0.88rem' }}
                   >
-                    Add to Shortlist
+                    Add {quantity} Units
                   </button>
                   <button
                     type="button"
                     className="button-primary"
                     onClick={handleAddAndOpen}
-                    style={{ flex: 1.2, padding: '12px', fontSize: '0.9rem' }}
+                    style={{ flex: 1.2, padding: '12px', fontSize: '0.88rem' }}
                   >
-                    Add & Request Quote
+                    Add & View Basket
                   </button>
                 </div>
               </div>

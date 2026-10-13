@@ -8,8 +8,8 @@ import { Toast } from './components/Toast';
 import { MobileBottomBar } from './components/MobileBottomBar';
 
 export const metadata: Metadata = {
-  title: 'Hands of Heritage | Artisan Wedding & Corporate Gifting',
-  description: 'Premium handcrafted gifting for weddings, celebrations and corporate events. Artisan-made copper, brass and marble keepsakes.',
+  title: 'Hands of Heritage | Handcrafted Wedding Favours & Heirloom Keepsakes',
+  description: 'Bespoke artisan wedding favours, ceremony keepsakes, and celebration gifts in pure copper, brass and marble. Also offering curated corporate gifting.',
 };
 
 export default function RootLayout({ children }: { children: ReactNode }) {

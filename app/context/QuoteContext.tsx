@@ -1,6 +1,6 @@
 'use client';
 
-import React, { createContext, useContext, useState, useEffect } from 'react';
+import React, { createContext, useContext, useState, useEffect, useRef } from 'react';
 import type { Product } from '../site-content';
 import { db } from '../firebase';
 import { collection, addDoc } from 'firebase/firestore';
@@ -20,6 +20,8 @@ export type QuoteFormData = {
   personalisation: string;
   budget: string;
   notes: string;
+  eventType?: string;
+  refId?: string;
 };
 
 type QuoteContextType = {
@@ -44,6 +46,8 @@ type QuoteContextType = {
 
 const QuoteContext = createContext<QuoteContextType | undefined>(undefined);
 
+const STORAGE_KEY = 'hoh_quote_basket';
+
 export function QuoteProvider({ children }: { children: React.ReactNode }) {
   const [quoteItems, setQuoteItems] = useState<BasketItem[]>([]);
   const [drawerOpen, setDrawerOpen] = useState(false);
@@ -52,8 +56,57 @@ export function QuoteProvider({ children }: { children: React.ReactNode }) {
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [isSubmitted, setIsSubmitted] = useState(false);
   const [lastSubmissionData, setLastSubmissionData] = useState<QuoteFormData | null>(null);
+  const isHydrated = useRef(false);
 
-  // Trigger custom event listener for backwards compatibility
+  // 1. Hydrate basket from localStorage on initial client mount
+  useEffect(() => {
+    if (typeof window !== 'undefined') {
+      try {
+        const stored = localStorage.getItem(STORAGE_KEY);
+        if (stored) {
+          const parsed = JSON.parse(stored);
+          if (Array.isArray(parsed) && parsed.length > 0) {
+            setQuoteItems(parsed);
+          }
+        }
+      } catch (err) {
+        console.error('Failed to restore quote basket from localStorage:', err);
+      } finally {
+        isHydrated.current = true;
+      }
+    }
+  }, []);
+
+  // 2. Persist basket to localStorage whenever quoteItems change
+  useEffect(() => {
+    if (isHydrated.current && typeof window !== 'undefined') {
+      try {
+        localStorage.setItem(STORAGE_KEY, JSON.stringify(quoteItems));
+      } catch (err) {
+        console.error('Failed to save quote basket to localStorage:', err);
+      }
+    }
+  }, [quoteItems]);
+
+  // 3. Listen for changes across browser tabs/windows
+  useEffect(() => {
+    const handleStorageChange = (e: StorageEvent) => {
+      if (e.key === STORAGE_KEY && e.newValue) {
+        try {
+          const updated = JSON.parse(e.newValue);
+          if (Array.isArray(updated)) {
+            setQuoteItems(updated);
+          }
+        } catch (err) {
+          console.error('Storage sync error:', err);
+        }
+      }
+    };
+    window.addEventListener('storage', handleStorageChange);
+    return () => window.removeEventListener('storage', handleStorageChange);
+  }, []);
+
+  // Listen for custom open-quote-drawer event
   useEffect(() => {
     const handleOpenDrawerEvent = () => {
       setDrawerOpen(true);
@@ -66,42 +119,66 @@ export function QuoteProvider({ children }: { children: React.ReactNode }) {
     setToastMessage(message);
     setTimeout(() => {
       setToastMessage((current) => (current === message ? null : current));
-    }, 3000);
+    }, 3500);
   };
 
-  const addToQuote = (product: Product, quantity = 1) => {
+  const addToQuote = (product: Product, quantity?: number) => {
+    const minMoq = product.moq || 50;
+    const qtyToAdd = quantity !== undefined && quantity > 0 ? Math.max(minMoq, quantity) : minMoq;
+
     setQuoteItems((current) => {
       const existingIndex = current.findIndex((item) => item.product.id === product.id);
       if (existingIndex > -1) {
         const updated = [...current];
         updated[existingIndex] = {
           ...updated[existingIndex],
-          quantity: updated[existingIndex].quantity + quantity,
+          quantity: updated[existingIndex].quantity + (quantity !== undefined ? quantity : 10),
         };
         return updated;
       }
-      return [...current, { product, quantity }];
+      return [...current, { product, quantity: qtyToAdd }];
     });
 
-    showToast(`"Added to your shortlist" - ${product.name}`);
+    showToast(`Added ${qtyToAdd} units of "${product.name}" to your shortlist`);
   };
 
   const removeFromQuote = (productId: number) => {
+    const removedItem = quoteItems.find((item) => item.product.id === productId);
     setQuoteItems((current) => current.filter((item) => item.product.id !== productId));
+    if (removedItem) {
+      showToast(`Removed "${removedItem.product.name}" from shortlist`);
+    }
   };
 
   const updateQuantity = (productId: number, newQty: number) => {
+    const item = quoteItems.find((i) => i.product.id === productId);
+    if (!item) return;
+
+    const minMoq = item.product.moq || 50;
+
     if (newQty <= 0) {
       removeFromQuote(productId);
       return;
     }
+
+    if (newQty < minMoq) {
+      showToast(`Minimum order for "${item.product.name}" is ${minMoq} units`);
+      setQuoteItems((current) =>
+        current.map((i) => (i.product.id === productId ? { ...i, quantity: minMoq } : i))
+      );
+      return;
+    }
+
     setQuoteItems((current) =>
-      current.map((item) => (item.product.id === productId ? { ...item, quantity: newQty } : item))
+      current.map((i) => (i.product.id === productId ? { ...i, quantity: newQty } : i))
     );
   };
 
   const clearQuote = () => {
     setQuoteItems([]);
+    if (typeof window !== 'undefined') {
+      localStorage.removeItem(STORAGE_KEY);
+    }
   };
 
   const openDrawer = () => {
@@ -126,47 +203,78 @@ export function QuoteProvider({ children }: { children: React.ReactNode }) {
   };
 
   const submitQuote = async (formData: QuoteFormData): Promise<boolean> => {
-    if (!formData.name || !formData.email) {
+    if (quoteItems.length === 0) {
+      window.alert('Your shortlist is empty. Please add at least one product before submitting a quote.');
+      return false;
+    }
+
+    if (!formData.name?.trim() || !formData.email?.trim()) {
       window.alert('Please fill in both your name and email address.');
       return false;
     }
-    if (quoteItems.length === 0) {
-      window.alert('Your shortlist is empty. Please add at least one product to submit a quote.');
+
+    // Basic email format validation
+    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+    if (!emailRegex.test(formData.email.trim())) {
+      window.alert('Please provide a valid email address.');
+      return false;
+    }
+
+    if (!formData.deliveryLocation?.trim()) {
+      window.alert('Please provide your delivery postcode or destination country.');
+      return false;
+    }
+
+    if (!formData.eventDate) {
+      window.alert('Please select your required delivery or event date.');
       return false;
     }
 
     setIsSubmitting(true);
-    try {
-      await addDoc(collection(db, 'quotes'), {
-        type: 'basket',
-        name: formData.name,
-        email: formData.email,
-        phone: formData.phone,
-        eventDate: formData.eventDate,
-        deliveryLocation: formData.deliveryLocation,
-        packaging: formData.packaging,
-        personalisation: formData.personalisation,
-        budget: formData.budget,
-        notes: formData.notes,
-        createdAt: new Date().toISOString(),
-        status: 'New',
-        items: quoteItems.map((item) => ({
-          id: item.product.id,
-          name: item.product.name,
-          material: item.product.material,
-          category: item.product.category,
-          image: item.product.image,
-          min: item.product.min,
-          quantity: item.quantity,
-        })),
-      });
+    const refId = `HOH-${Date.now().toString().slice(-6)}`;
+    const submissionPayload = {
+      ...formData,
+      refId,
+      name: formData.name.trim(),
+      email: formData.email.trim(),
+      eventType: formData.eventType || 'Wedding / Celebration',
+      createdAt: new Date().toISOString(),
+      status: 'New' as const,
+      owner: 'Unassigned',
+      type: 'basket' as const,
+      items: quoteItems.map((item) => ({
+        id: item.product.id,
+        name: item.product.name,
+        material: item.product.material,
+        category: item.product.category,
+        image: item.product.image,
+        min: item.product.min,
+        moq: item.product.moq,
+        quantity: item.quantity,
+      })),
+    };
 
-      setLastSubmissionData(formData);
+    try {
+      // 1. Save to Firebase Firestore
+      await addDoc(collection(db, 'quotes'), submissionPayload);
+
+      // 2. Dispatch automated customer & business notification emails via API
+      try {
+        await fetch('/api/enquiry', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(submissionPayload),
+        });
+      } catch (emailErr) {
+        console.warn('Email dispatch warning (logged):', emailErr);
+      }
+
+      setLastSubmissionData({ ...formData, refId });
       setIsSubmitted(true);
       return true;
     } catch (error) {
       console.error('Failed to submit quote to Firebase:', error);
-      window.alert('Failed to submit quote. Please check your network connection and try again.');
+      window.alert('Failed to submit quote. Please check your connection and try again.');
       return false;
     } finally {
       setIsSubmitting(false);

@@ -24,13 +24,23 @@ export function SiteHeader({ activeHref }: SiteHeaderProps) {
       </Link>
       <nav className="header-nav">
         <ul>
-          {navLinks.map((link) => (
-            <li key={link.href}>
-              <Link className={activeHref === link.href ? 'active' : undefined} href={link.href}>
-                {link.label}
-              </Link>
-            </li>
-          ))}
+            {navLinks.map((link) => {
+              const isCorporate = link.href === '/corporate-gifts';
+              const isWedding = link.href === '/wedding-favours';
+              const linkClasses = [
+                activeHref === link.href ? 'active' : '',
+                isWedding ? 'nav-primary' : '',
+                isCorporate ? 'nav-secondary' : '',
+              ].filter(Boolean).join(' ');
+
+              return (
+                <li key={link.href}>
+                  <Link className={linkClasses || undefined} href={link.href}>
+                    {link.label}
+                  </Link>
+                </li>
+              );
+            })}
         </ul>
         <button type="button" className="nav-cta" onClick={openDrawer}>
           Request a quote

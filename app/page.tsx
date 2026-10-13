@@ -4,15 +4,16 @@ import Image from 'next/image';
 import Link from 'next/link';
 import { AnimatePresence, motion } from 'framer-motion';
 import { useState, useEffect } from 'react';
-import { products, type Product } from './site-content';
+import { products, pickItems, type Product } from './site-content';
 import { useQuote } from './context/QuoteContext';
 import { ProductCard } from './components/ProductCard';
+import { SiteFooter } from './components/SiteFooter';
 
 const homeNavLinks = [
-  { label: 'Wedding favours', href: '/wedding-favours' },
-  { label: 'Corporate gifts', href: '/corporate-gifts' },
+  { label: 'Wedding favours', href: '/wedding-favours', isPrimary: true },
   { label: 'Packaging', href: '/packaging' },
   { label: 'Gallery', href: '/gallery' },
+  { label: 'Corporate gifts', href: '/corporate-gifts', isSecondary: true },
 ];
 
 const heroItems: { name: string; image?: string; video?: string; className: string }[] = [
@@ -22,13 +23,13 @@ const heroItems: { name: string; image?: string; video?: string; className: stri
     className: 'tall',
   },
   {
-    name: 'Pure copper water tumbler',
-    image: '/Pure Copper Water Tumbler.png',
+    name: 'Lotus brass tealight holder',
+    image: '/Lotus_Brass_Tealight_Holder.png',
     className: '',
   },
   {
-    name: 'Hammered Moscow mule mug',
-    image: '/Hammered Copper Moscow Mule Mug.png',
+    name: 'Mini brass diya oil lamp',
+    image: '/Mini_Brass_Diya_Oil_Lamp.png',
     className: '',
   },
 ];
@@ -43,8 +44,17 @@ export default function Home() {
   const [isLoading, setIsLoading] = useState(true);
   const totalCount = quoteItems.reduce((acc, item) => acc + item.quantity, 0);
 
-  // Curate 8 top featured products for the homepage
-  const featuredProducts: Product[] = products.slice(0, 8);
+  // Curate 8 top wedding favour products for the homepage
+  const featuredWeddingFavours: Product[] = pickItems([
+    'Lotus brass tealight holder',
+    'Mini brass diya oil lamp',
+    'Copper tea light holder',
+    'Peacock brass diya lamp',
+    'Taj marble coaster set',
+    'Marble ring holder',
+    'Marble jewellery dish',
+    'Pure copper water tumbler',
+  ]);
 
   useEffect(() => {
     const timer = setTimeout(() => {
@@ -100,11 +110,20 @@ export default function Home() {
           </Link>
           <nav className="header-nav">
             <ul>
-              {homeNavLinks.map((link) => (
-                <li key={link.href}>
-                  <Link href={link.href}>{link.label}</Link>
-                </li>
-              ))}
+              {homeNavLinks.map((link) => {
+                const linkClasses = [
+                  link.isPrimary ? 'nav-primary' : '',
+                  link.isSecondary ? 'nav-secondary' : '',
+                ].filter(Boolean).join(' ');
+
+                return (
+                  <li key={link.href}>
+                    <Link className={linkClasses || undefined} href={link.href}>
+                      {link.label}
+                    </Link>
+                  </li>
+                );
+              })}
             </ul>
             <button type="button" className="nav-cta" onClick={openDrawer}>
               Request a quote
@@ -124,21 +143,27 @@ export default function Home() {
             transition={{ duration: 0.9, ease: 'easeOut' }}
           >
             <div className="hero-copy">
-              <p className="eyebrow">Handcrafted gifting from India</p>
+              <p className="eyebrow">Bespoke Wedding Favours & Celebration Keepsakes</p>
               <h1>
-                Gifts that carry <em>memory</em> forward
+                Heirloom favours your guests will <em>cherish forever</em>
               </h1>
               <p className="hero-text">
-                A curated collection of artisan-made wedding favours and corporate gifts. Each keepsake is crafted with mindful workmanship, luxe materials and elegant personalization.
+                Artisan-crafted copper, brass and marble keepsakes designed for sacred ceremonies, welcome room hampers, and memorable celebration tables.
               </p>
               <div className="hero-actions">
                 <Link className="button-primary" href="/wedding-favours">
-                  Wedding favours
+                  Explore Wedding Favours
                 </Link>
-                <Link className="button-secondary" href="/corporate-gifts">
-                  Corporate gifts
-                </Link>
+                <button type="button" className="button-secondary" onClick={openDrawer}>
+                  Request a Quote
+                </button>
               </div>
+              <p style={{ marginTop: '16px', fontSize: '0.84rem', color: '#7d6648' }}>
+                Planning executive gifting or team hampers?{' '}
+                <Link href="/corporate-gifts" style={{ textDecoration: 'underline', color: '#b5632a', fontWeight: 500 }}>
+                  Explore corporate gifting →
+                </Link>
+              </p>
             </div>
 
             <motion.div className="hero-visual" initial={{ opacity: 0, y: 30 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.9, ease: 'easeOut' }}>
@@ -164,7 +189,7 @@ export default function Home() {
             </motion.div>
           </motion.section>
 
-          {/* Streamlined Featured Catalogue Section (6-8 items) */}
+          {/* Streamlined Featured Catalogue Section (Wedding Favours Focus) */}
           <motion.section
             className="catalogue-section"
             id="products"
@@ -175,19 +200,25 @@ export default function Home() {
             transition={{ duration: 0.85, ease: 'easeOut' }}
           >
             <div className="section-intro">
-              <p className="eyebrow">Signature Collection</p>
-              <h2>Featured Handcrafted Keepsakes</h2>
+              <p className="eyebrow">Wedding Collection</p>
+              <h2>Signature Ceremony Favours & Hampers</h2>
+              <p style={{ maxWidth: '620px', margin: '8px auto 0', color: '#675740', fontSize: '0.95rem' }}>
+                Curated artisan pieces favored by couples for ceremony rituals, mehendi giveaways, and luxury destination wedding welcome hampers.
+              </p>
             </div>
 
             <div className="product-grid" style={{ gridTemplateColumns: 'repeat(auto-fill, minmax(260px, 1fr))', gap: '24px' }}>
-              {featuredProducts.map((product) => (
+              {featuredWeddingFavours.map((product) => (
                 <ProductCard key={product.id} product={product} />
               ))}
             </div>
 
-            <div style={{ textAlign: 'center', marginTop: '40px' }}>
-              <Link className="button-secondary" href="/gallery" style={{ display: 'inline-flex', alignItems: 'center', gap: '8px', padding: '14px 28px', fontSize: '0.95rem' }}>
-                Browse Full Catalogue (29+ Items & Filters) →
+            <div style={{ textAlign: 'center', marginTop: '40px', display: 'flex', justifyContent: 'center', gap: '16px', flexWrap: 'wrap' }}>
+              <Link className="button-primary" href="/wedding-favours" style={{ padding: '14px 28px', fontSize: '0.95rem' }}>
+                View Wedding Curation Guide →
+              </Link>
+              <Link className="button-secondary" href="/gallery" style={{ padding: '14px 28px', fontSize: '0.95rem' }}>
+                Browse Full Catalogue (29 Items) →
               </Link>
             </div>
           </motion.section>
@@ -218,7 +249,7 @@ export default function Home() {
             </div>
           </motion.section>
 
-          {/* One Genuine Case Study / Testimonial */}
+          {/* One Genuine Wedding Case Study / Testimonial */}
           <motion.section
             className="long-panel"
             variants={sectionReveal}
@@ -228,9 +259,9 @@ export default function Home() {
             transition={{ duration: 0.85, ease: 'easeOut' }}
           >
             <div style={{ textAlign: 'center', maxWidth: '720px', margin: '0 auto' }}>
-              <p className="eyebrow">Client Case Study</p>
+              <p className="eyebrow">Wedding Case Study</p>
               <h2 style={{ fontFamily: 'Cormorant Garamond, serif', fontSize: '2.2rem', color: '#251b14', marginBottom: '20px' }}>
-                &quot;The marble coasters in our welcome hampers were the highlight of our destination wedding in Udaipur. Flawless craftsmanship and individual personalization.&quot;
+                &quot;The marble coasters and brass diyas in our welcome hampers were the highlight of our destination wedding in Udaipur. Flawless craftsmanship and individual personalization.&quot;
               </h2>
               <p className="eyebrow" style={{ color: '#b5632a', fontWeight: 600 }}>
                 — Priya & Rohan (500 Guest Wedding, Udaipur)
@@ -238,7 +269,43 @@ export default function Home() {
             </div>
           </motion.section>
 
-          {/* Strong Final Quote Call-To-Action Banner */}
+          {/* Dedicated Corporate Gifting Secondary Section */}
+          <motion.section
+            className="corporate-section-home"
+            variants={sectionReveal}
+            initial="hidden"
+            whileInView="visible"
+            viewport={{ once: true, amount: 0.2 }}
+            transition={{ duration: 0.85, ease: 'easeOut' }}
+            style={{
+              backgroundColor: '#fff',
+              border: '1px solid rgba(37, 27, 18, 0.08)',
+              borderRadius: '20px',
+              padding: '36px 40px',
+              margin: '40px 0',
+              display: 'flex',
+              justifyContent: 'space-between',
+              alignItems: 'center',
+              flexWrap: 'wrap',
+              gap: '24px',
+              boxShadow: '0 4px 20px rgba(37, 27, 18, 0.03)',
+            }}
+          >
+            <div style={{ maxWidth: '640px' }}>
+              <p className="eyebrow" style={{ color: '#7d6648', marginBottom: '6px' }}>For Organizations & Brands</p>
+              <h3 style={{ fontFamily: 'Cormorant Garamond, serif', fontSize: '1.9rem', margin: '0 0 10px', color: '#251b14' }}>
+                Looking for Corporate & Executive Gifting?
+              </h3>
+              <p style={{ margin: 0, color: '#675740', fontSize: '0.92rem', lineHeight: 1.6 }}>
+                We also craft statement copper drinkware, marble desk keepsakes, and branded onboarding hampers for corporate milestones, leadership summits, and client appreciation.
+              </p>
+            </div>
+            <Link className="button-secondary" href="/corporate-gifts" style={{ whiteSpace: 'nowrap', padding: '12px 24px' }}>
+              Explore Corporate Gifting →
+            </Link>
+          </motion.section>
+
+          {/* Strong Final Wedding Quote Call-To-Action Banner */}
           <motion.section
             className="quote-banner"
             variants={sectionReveal}
@@ -250,39 +317,15 @@ export default function Home() {
             <div>
               <p className="eyebrow">Bespoke Curation</p>
               <h2>
-                Every favour, <em>personally</em> crafted for your event
+                Every favour, <em>personally</em> crafted for your wedding
               </h2>
             </div>
             <button type="button" className="button-primary" onClick={openDrawer}>
-              Request a personalised quote
+              Request a personalised favour quote
             </button>
           </motion.section>
         </main>
-
-        <footer className="site-footer" style={{ display: 'flex', flexDirection: 'column', gap: '20px', alignItems: 'center' }}>
-          <div style={{ display: 'flex', flexWrap: 'wrap', gap: '24px', justifyContent: 'center', fontSize: '0.9rem' }}>
-            <Link href="/wedding-favours" style={{ color: '#5f4f3b', textDecoration: 'none' }}>Wedding Favours</Link>
-            <Link href="/corporate-gifts" style={{ color: '#5f4f3b', textDecoration: 'none' }}>Corporate Gifts</Link>
-            <Link href="/packaging" style={{ color: '#5f4f3b', textDecoration: 'none' }}>Bespoke Packaging</Link>
-            <Link href="/gallery" style={{ color: '#5f4f3b', textDecoration: 'none' }}>Full Catalogue</Link>
-            <button
-              type="button"
-              onClick={openDrawer}
-              style={{ background: 'none', border: 'none', color: '#b5632a', fontWeight: 600, cursor: 'pointer', fontSize: '0.9rem', padding: 0 }}
-            >
-              Request a Quote
-            </button>
-          </div>
-
-          <div style={{ display: 'flex', justifyContent: 'space-between', width: '100%', alignItems: 'center', borderTop: '1px solid rgba(34,24,14,0.06)', paddingTop: '16px' }}>
-            <p style={{ margin: 0 }}>© 2026 Hands of Heritage. All rights reserved.</p>
-            <div className="footer-links">
-              <span>Privacy</span>
-              <span>Terms</span>
-              <span>Instagram</span>
-            </div>
-          </div>
-        </footer>
+        <SiteFooter />
       </div>
     </>
   );

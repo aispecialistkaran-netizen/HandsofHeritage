@@ -6,19 +6,41 @@ import Link from 'next/link';
 import { db } from '../firebase';
 import { collection, query, onSnapshot, doc, updateDoc, deleteDoc, orderBy } from 'firebase/firestore';
 
+type LeadStatus =
+  | 'New'
+  | 'Contacted'
+  | 'Quote Sent'
+  | 'Awaiting Customer'
+  | 'Won'
+  | 'Lost'
+  | 'Archived';
+
+const ALL_STATUSES: LeadStatus[] = [
+  'New',
+  'Contacted',
+  'Quote Sent',
+  'Awaiting Customer',
+  'Won',
+  'Lost',
+  'Archived',
+];
+
 type QuoteItem = {
+  id?: number;
   name: string;
   material: string;
   category: string;
   image: string;
   min?: string;
+  moq?: number;
   quantity?: number;
 };
 
 type Quote = {
   id: string;
+  refId?: string;
   createdAt: string;
-  status: 'New' | 'Contacted' | 'Archived';
+  status: LeadStatus;
   type: 'basket' | 'single';
   name: string;
   email: string;
@@ -35,6 +57,21 @@ type Quote = {
   quantity?: number;
   city?: string;
   items: QuoteItem[];
+  // Internal Lead & CRM Tracking
+  owner?: string;
+  nextAction?: string;
+  followUpDate?: string;
+  internalNotes?: string;
+};
+
+const statusStyles: Record<LeadStatus, { bg: string; color: string; border: string }> = {
+  'New': { bg: '#dbeafe', color: '#1e40af', border: '#bfdbfe' },
+  'Contacted': { bg: '#fef3c7', color: '#92400e', border: '#fde68a' },
+  'Quote Sent': { bg: '#f3e8ff', color: '#6b21a8', border: '#e9d5ff' },
+  'Awaiting Customer': { bg: '#ffedd5', color: '#9a3412', border: '#fed7aa' },
+  'Won': { bg: '#dcfce7', color: '#166534', border: '#bbf7d0' },
+  'Lost': { bg: '#f1f5f9', color: '#475569', border: '#cbd5e1' },
+  'Archived': { bg: '#e5e7eb', color: '#374151', border: '#d1d5db' },
 };
 
 // Mock Unit Prices for estimating deal values
@@ -43,7 +80,7 @@ const getMockUnitPrice = (material: string): number => {
     case 'copper': return 800;  // INR per unit
     case 'brass': return 1200; // INR per unit
     case 'marble': return 1500; // INR per unit
-    default: return 500;
+    default: return 600;
   }
 };
 
@@ -51,20 +88,31 @@ export default function AdminDashboard() {
   const [quotes, setQuotes] = useState<Quote[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  
+
   // Navigation tabs state
   const [activeTab, setActiveTab] = useState<'list' | 'analytics'>('list');
 
   // Filtering & searching states
   const [statusFilter, setStatusFilter] = useState<string>('all');
+  const [ownerFilter, setOwnerFilter] = useState<string>('all');
   const [typeFilter, setTypeFilter] = useState<string>('all');
   const [searchTerm, setSearchTerm] = useState<string>('');
-  
+
   // Selected quote for detailed modal
   const [selectedQuote, setSelectedQuote] = useState<Quote | null>(null);
-  
-  // Quote ID targeted for custom delete confirmation
+
+  // Internal CRM edit form state for selected quote
+  const [crmOwner, setCrmOwner] = useState('Unassigned');
+  const [crmNextAction, setCrmNextAction] = useState('');
+  const [crmFollowUpDate, setCrmFollowUpDate] = useState('');
+  const [crmInternalNotes, setCrmInternalNotes] = useState('');
+  const [isSavingCrm, setIsSavingCrm] = useState(false);
+
+  // Quote ID targeted for delete confirmation
   const [quoteToDelete, setQuoteToDelete] = useState<string | null>(null);
+
+  // Security policy modal
+  const [showSecurityModal, setShowSecurityModal] = useState(false);
 
   // Admin login states
   const [username, setUsername] = useState('');
@@ -72,7 +120,17 @@ export default function AdminDashboard() {
   const [isLoggedIn, setIsLoggedIn] = useState(false);
   const [loginError, setLoginError] = useState('');
 
-  // Check sessionStorage on mount to persist session across refreshes
+  // Sync CRM inputs whenever selected quote changes
+  useEffect(() => {
+    if (selectedQuote) {
+      setCrmOwner(selectedQuote.owner || 'Unassigned');
+      setCrmNextAction(selectedQuote.nextAction || '');
+      setCrmFollowUpDate(selectedQuote.followUpDate || '');
+      setCrmInternalNotes(selectedQuote.internalNotes || '');
+    }
+  }, [selectedQuote]);
+
+  // Check sessionStorage on mount
   useEffect(() => {
     if (typeof window !== 'undefined') {
       const logged = sessionStorage.getItem('admin_logged_in');
@@ -100,21 +158,20 @@ export default function AdminDashboard() {
     setPassword('');
   };
 
-  // Placeholder for manual refresh triggers
-  const fetchQuotes = () => {
-    console.log('Firebase subscription is active and syncing automatically.');
-  };
-
   // Set up real-time listener for quotes from Firestore
   useEffect(() => {
     const q = query(collection(db, 'quotes'), orderBy('createdAt', 'desc'));
     const unsubscribe = onSnapshot(
       q,
       (snapshot) => {
-        const data = snapshot.docs.map((doc) => ({
-          id: doc.id,
-          ...doc.data(),
-        })) as Quote[];
+        const data = snapshot.docs.map((doc) => {
+          const docData = doc.data();
+          return {
+            id: doc.id,
+            ...docData,
+            status: ALL_STATUSES.includes(docData.status) ? docData.status : 'New',
+          };
+        }) as Quote[];
         setQuotes(data);
         setError(null);
         setLoading(false);
@@ -130,12 +187,10 @@ export default function AdminDashboard() {
   }, []);
 
   // Update quote status in Firestore
-  const updateStatus = async (id: string, newStatus: 'New' | 'Contacted' | 'Archived') => {
+  const updateStatus = async (id: string, newStatus: LeadStatus) => {
     try {
       const docRef = doc(db, 'quotes', id);
       await updateDoc(docRef, { status: newStatus });
-      
-      // Update local detailed selected modal view if active
       if (selectedQuote && selectedQuote.id === id) {
         setSelectedQuote((prev) => (prev ? { ...prev, status: newStatus } : null));
       }
@@ -145,18 +200,34 @@ export default function AdminDashboard() {
     }
   };
 
-  // Trigger custom delete confirmation modal
-  const deleteQuote = (id: string) => {
-    setQuoteToDelete(id);
+  // Save CRM follow-up details
+  const saveCrmDetails = async () => {
+    if (!selectedQuote) return;
+    setIsSavingCrm(true);
+    try {
+      const docRef = doc(db, 'quotes', selectedQuote.id);
+      const updates = {
+        owner: crmOwner,
+        nextAction: crmNextAction,
+        followUpDate: crmFollowUpDate,
+        internalNotes: crmInternalNotes,
+      };
+      await updateDoc(docRef, updates);
+      setSelectedQuote((prev) => (prev ? { ...prev, ...updates } : null));
+      window.alert('Lead ownership and follow-up details saved.');
+    } catch (err) {
+      console.error('Failed to update lead follow-up details:', err);
+      window.alert('Failed to save lead updates.');
+    } finally {
+      setIsSavingCrm(false);
+    }
   };
 
-  // Perform actual delete from Firestore
+  // Delete quote execution
   const executeDelete = async (id: string) => {
     try {
       const docRef = doc(db, 'quotes', id);
       await deleteDoc(docRef);
-      
-      // Clear local detailed selected modal view if active
       if (selectedQuote && selectedQuote.id === id) {
         setSelectedQuote(null);
       }
@@ -166,115 +237,163 @@ export default function AdminDashboard() {
     }
   };
 
-  // Filtered & Searched quotes list (used in List view)
+  // Filtered quotes
   const filteredQuotes = useMemo(() => {
     return quotes.filter((q) => {
       const matchesStatus = statusFilter === 'all' || q.status === statusFilter;
+      const matchesOwner = ownerFilter === 'all' || (q.owner || 'Unassigned') === ownerFilter;
       const matchesType = typeFilter === 'all' || q.type === typeFilter;
-      
+
       const searchLower = searchTerm.toLowerCase();
-      const matchesSearch = 
-        q.name.toLowerCase().includes(searchLower) ||
-        q.email.toLowerCase().includes(searchLower) ||
+      const matchesSearch =
+        (q.name || '').toLowerCase().includes(searchLower) ||
+        (q.email || '').toLowerCase().includes(searchLower) ||
         (q.phone && q.phone.toLowerCase().includes(searchLower)) ||
+        (q.refId && q.refId.toLowerCase().includes(searchLower)) ||
         (q.city && q.city.toLowerCase().includes(searchLower)) ||
+        (q.deliveryLocation && q.deliveryLocation.toLowerCase().includes(searchLower)) ||
         q.items.some((item) => item.name.toLowerCase().includes(searchLower));
 
-      return matchesStatus && matchesType && matchesSearch;
+      return matchesStatus && matchesOwner && matchesType && matchesSearch;
     });
-  }, [quotes, statusFilter, typeFilter, searchTerm]);
+  }, [quotes, statusFilter, ownerFilter, typeFilter, searchTerm]);
 
-  // Compute base stats
+  // Compute stats
   const stats = useMemo(() => {
     const total = quotes.length;
     const newCount = quotes.filter((q) => q.status === 'New').length;
-    const contactedCount = quotes.filter((q) => q.status === 'Contacted').length;
-    const totalItemsRequested = quotes.reduce((acc, q) => acc + (q.items?.length || 0), 0);
-    return { total, newCount, contactedCount, totalItemsRequested };
+    const activeCount = quotes.filter((q) => ['New', 'Contacted', 'Quote Sent', 'Awaiting Customer'].includes(q.status)).length;
+    const wonCount = quotes.filter((q) => q.status === 'Won').length;
+    const totalPhysicalUnits = quotes.reduce((acc, q) => {
+      const sumUnits = q.items.reduce((s, i) => s + (i.quantity || 1), 0);
+      return acc + sumUnits;
+    }, 0);
+    return { total, newCount, activeCount, wonCount, totalPhysicalUnits };
   }, [quotes]);
 
   // Calculate quote item deal value
   const getQuoteValue = (quote: Quote) => {
-    const qty = quote.type === 'basket' ? (quote.guestCount || 50) : (quote.quantity || 50);
-    const sumPrices = quote.items.reduce((acc, item) => acc + getMockUnitPrice(item.material), 0);
-    return qty * sumPrices;
+    const sumPrices = quote.items.reduce((acc, item) => {
+      const units = item.quantity || (quote.type === 'basket' ? 50 : 1);
+      return acc + (getMockUnitPrice(item.material) * units);
+    }, 0);
+    return sumPrices;
   };
 
-  // Compute deeper business analytics
+  // Export all enquiries to CSV
+  const exportToCSV = () => {
+    if (quotes.length === 0) {
+      window.alert('No quotes to export.');
+      return;
+    }
+    const headers = [
+      'Reference ID',
+      'Received Date (UK)',
+      'Status',
+      'Owner',
+      'Client Name',
+      'Email',
+      'Phone',
+      'Event Type',
+      'Required Date',
+      'Delivery Destination',
+      'Packaging Choice',
+      'Personalisation',
+      'Budget',
+      'Total Physical Units',
+      'Products Requested',
+      'Next Action',
+      'Follow-up Date',
+      'Customer Notes',
+      'Internal Notes',
+    ];
+
+    const rows = quotes.map((q) => {
+      const ukDate = new Date(q.createdAt).toLocaleString('en-GB', {
+        day: '2-digit',
+        month: 'short',
+        year: 'numeric',
+        hour: '2-digit',
+        minute: '2-digit',
+      });
+      const totalUnits = q.items.reduce((acc, i) => acc + (i.quantity || 1), 0);
+      const itemsFormatted = q.items.map((i) => `${i.name} [${i.material}]: ${i.quantity || 1} units`).join('; ');
+
+      return [
+        `"${q.refId || q.id}"`,
+        `"${ukDate}"`,
+        `"${q.status}"`,
+        `"${q.owner || 'Unassigned'}"`,
+        `"${(q.name || '').replace(/"/g, '""')}"`,
+        `"${q.email || ''}"`,
+        `"${q.phone || ''}"`,
+        `"${(q.eventType || q.occasion || 'Wedding / Celebration').replace(/"/g, '""')}"`,
+        `"${q.eventDate || ''}"`,
+        `"${(q.deliveryLocation || q.city || '').replace(/"/g, '""')}"`,
+        `"${(q.packaging || '').replace(/"/g, '""')}"`,
+        `"${(q.personalisation || '').replace(/"/g, '""')}"`,
+        `"${(q.budget || '').replace(/"/g, '""')}"`,
+        totalUnits,
+        `"${itemsFormatted.replace(/"/g, '""')}"`,
+        `"${(q.nextAction || '').replace(/"/g, '""')}"`,
+        `"${q.followUpDate || ''}"`,
+        `"${(q.notes || '').replace(/"/g, '""')}"`,
+        `"${(q.internalNotes || '').replace(/"/g, '""')}"`,
+      ].join(',');
+    });
+
+    const csvContent = 'data:text/csv;charset=utf-8,\uFEFF' + [headers.join(','), ...rows].join('\n');
+    const encodedUri = encodeURI(csvContent);
+    const link = document.createElement('a');
+    link.setAttribute('href', encodedUri);
+    link.setAttribute('download', `Hands_of_Heritage_Enquiries_${new Date().toISOString().split('T')[0]}.csv`);
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+  };
+
+  // Compute deeper analytics
   const analytics = useMemo(() => {
     if (quotes.length === 0) {
       return {
         pipelineValue: 0,
         avgDealValue: 0,
         materialShare: { copper: 0, brass: 0, marble: 0 },
-        categoryShare: {},
         topProducts: [],
         topOccasions: [],
-        topCities: [],
       };
     }
 
     let pipelineValue = 0;
     const materialCounts: Record<string, number> = { copper: 0, brass: 0, marble: 0 };
-    const categoryCounts: Record<string, number> = {};
     const productDetails: Record<string, { count: number; image: string; material: string }> = {};
     const occasionCounts: Record<string, number> = {};
-    const cityCounts: Record<string, number> = {};
 
     quotes.forEach((q) => {
-      // 1. Calculate Estimated Deal Value
-      const val = getQuoteValue(q);
-      pipelineValue += val;
-
-      const qty = q.type === 'basket' ? (q.guestCount || 50) : (q.quantity || 50);
-
-      // 2. Material & Category Share, and Product Leaderboard
+      pipelineValue += getQuoteValue(q);
       q.items.forEach((item) => {
+        const units = item.quantity || 1;
         const mat = item.material.toLowerCase();
-        if (mat in materialCounts) {
-          materialCounts[mat] += qty;
-        } else {
-          materialCounts[mat] = qty;
-        }
-
-        const cat = item.category.toLowerCase();
-        categoryCounts[cat] = (categoryCounts[cat] || 0) + qty;
+        if (mat in materialCounts) materialCounts[mat] += units;
+        else materialCounts[mat] = units;
 
         if (!productDetails[item.name]) {
           productDetails[item.name] = { count: 0, image: item.image, material: item.material };
         }
-        productDetails[item.name].count += qty;
+        productDetails[item.name].count += units;
       });
 
-      // 3. Occasion Breakdowns
-      const rawOcc = (q.eventType || q.occasion || 'General enquiry').trim();
-      const occ = rawOcc.charAt(0).toUpperCase() + rawOcc.slice(1).toLowerCase();
+      const occ = (q.eventType || q.occasion || 'Wedding / Celebration').trim();
       occasionCounts[occ] = (occasionCounts[occ] || 0) + 1;
-
-      // 4. Delivery Cities
-      if (q.city) {
-        const city = q.city.trim();
-        const normalizedCity = city.charAt(0).toUpperCase() + city.slice(1).toLowerCase();
-        cityCounts[normalizedCity] = (cityCounts[normalizedCity] || 0) + 1;
-      }
     });
 
     const avgDealValue = Math.round(pipelineValue / quotes.length);
-
-    // Sort product leaderboard
     const topProducts = Object.entries(productDetails)
       .map(([name, info]) => ({ name, ...info }))
       .sort((a, b) => b.count - a.count)
       .slice(0, 5);
 
-    // Sort occasions
     const topOccasions = Object.entries(occasionCounts)
-      .map(([name, count]) => ({ name, count }))
-      .sort((a, b) => b.count - a.count)
-      .slice(0, 5);
-
-    // Sort cities
-    const topCities = Object.entries(cityCounts)
       .map(([name, count]) => ({ name, count }))
       .sort((a, b) => b.count - a.count)
       .slice(0, 5);
@@ -283,335 +402,387 @@ export default function AdminDashboard() {
       pipelineValue,
       avgDealValue,
       materialShare: materialCounts,
-      categoryShare: categoryCounts,
       topProducts,
       topOccasions,
-      topCities,
     };
   }, [quotes]);
 
   if (!isLoggedIn) {
     return (
-      <div 
-        style={{ 
-          minHeight: '100vh', 
-          backgroundColor: '#251b14', // Sleek dark mode heritage background
+      <div
+        style={{
+          minHeight: '100vh',
+          backgroundColor: '#251b14',
           color: '#f7f0e8',
           fontFamily: 'system-ui, -apple-system, sans-serif',
           display: 'flex',
-          flexDirection: 'column',
           alignItems: 'center',
           justifyContent: 'center',
           padding: '20px',
-          background: 'radial-gradient(circle at center, #36281e 0%, #17110d 100%)'
         }}
       >
-        <div 
-          style={{ 
-            width: '100%', 
-            maxWidth: '400px', 
-            backgroundColor: 'rgba(54, 40, 30, 0.45)', 
-            backdropFilter: 'blur(10px)',
-            border: '1px solid rgba(197, 182, 165, 0.15)',
+        <div
+          style={{
+            backgroundColor: '#fff',
+            color: '#251b14',
             borderRadius: '16px',
             padding: '40px',
-            boxShadow: '0 24px 64px rgba(0,0,0,0.5)',
-            display: 'flex',
-            flexDirection: 'column',
-            alignItems: 'center',
-            gap: '24px'
+            width: '100%',
+            maxWidth: '420px',
+            boxShadow: '0 20px 40px rgba(0,0,0,0.4)',
           }}
         >
-          {/* Logo */}
-          <div style={{ textAlign: 'center' }}>
-            <Image src="/logohoh.png" alt="Hands of Heritage logo" width={64} height={58} style={{ filter: 'brightness(1.1)' }} />
-            <h1 style={{ margin: '12px 0 4px 0', fontFamily: 'Georgia, serif', fontSize: '1.6rem', fontWeight: 'normal', letterSpacing: '2px', color: '#f7f0e8' }}>
-              Hands of Heritage
+          <div style={{ textAlign: 'center', marginBottom: '24px' }}>
+            <div style={{ position: 'relative', width: '60px', height: '60px', margin: '0 auto 12px' }}>
+              <Image src="/logohoh.png" alt="Hands of Heritage Logo" fill style={{ objectFit: 'contain' }} />
+            </div>
+            <h1 style={{ fontFamily: 'Georgia, serif', fontSize: '1.8rem', margin: 0, color: '#251b14' }}>
+              Admin Portal
             </h1>
-            <span style={{ fontSize: '0.8rem', color: '#c5b6a5', letterSpacing: '1px' }}>ADMIN CONSOLE</span>
+            <p style={{ color: '#8c7d6b', fontSize: '0.85rem', marginTop: '6px' }}>
+              Hands of Heritage Enquiry Management
+            </p>
           </div>
 
-          {/* Form */}
-          <form onSubmit={handleLogin} style={{ width: '100%', display: 'flex', flexDirection: 'column', gap: '20px' }}>
-            <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
-              <label htmlFor="username-input" style={{ fontSize: '0.82rem', color: '#c5b6a5', fontWeight: 500, letterSpacing: '0.5px' }}>Username</label>
+          <form onSubmit={handleLogin} style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
+            <div>
+              <label style={{ fontSize: '0.82rem', fontWeight: 600, color: '#5f4f3b', display: 'block', marginBottom: '6px' }}>
+                Username
+              </label>
               <input
-                id="username-input"
                 type="text"
-                placeholder="Enter admin username"
                 value={username}
                 onChange={(e) => setUsername(e.target.value)}
+                placeholder="Enter administrator username"
                 required
-                style={{
-                  width: '100%',
-                  padding: '12px 16px',
-                  backgroundColor: 'rgba(23, 17, 13, 0.6)',
-                  border: '1px solid rgba(197, 182, 165, 0.3)',
-                  borderRadius: '8px',
-                  color: '#fff',
-                  fontSize: '0.95rem',
-                  outline: 'none',
-                  transition: 'border-color 0.2s'
-                }}
-                onFocus={(e) => (e.currentTarget.style.borderColor = '#b5632a')}
-                onBlur={(e) => (e.currentTarget.style.borderColor = 'rgba(197, 182, 165, 0.3)')}
+                style={{ width: '100%', padding: '10px 14px', borderRadius: '8px', border: '1px solid #c5b6a5', fontSize: '0.9rem', outline: 'none' }}
               />
             </div>
-
-            <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
-              <label htmlFor="password-input" style={{ fontSize: '0.82rem', color: '#c5b6a5', fontWeight: 500, letterSpacing: '0.5px' }}>Password</label>
+            <div>
+              <label style={{ fontSize: '0.82rem', fontWeight: 600, color: '#5f4f3b', display: 'block', marginBottom: '6px' }}>
+                Password
+              </label>
               <input
-                id="password-input"
                 type="password"
-                placeholder="Enter password"
                 value={password}
                 onChange={(e) => setPassword(e.target.value)}
+                placeholder="Enter administrator password"
                 required
-                style={{
-                  width: '100%',
-                  padding: '12px 16px',
-                  backgroundColor: 'rgba(23, 17, 13, 0.6)',
-                  border: '1px solid rgba(197, 182, 165, 0.3)',
-                  borderRadius: '8px',
-                  color: '#fff',
-                  fontSize: '0.95rem',
-                  outline: 'none',
-                  transition: 'border-color 0.2s'
-                }}
-                onFocus={(e) => (e.currentTarget.style.borderColor = '#b5632a')}
-                onBlur={(e) => (e.currentTarget.style.borderColor = 'rgba(197, 182, 165, 0.3)')}
+                style={{ width: '100%', padding: '10px 14px', borderRadius: '8px', border: '1px solid #c5b6a5', fontSize: '0.9rem', outline: 'none' }}
               />
             </div>
 
-            {/* Error Message */}
             {loginError && (
-              <div 
-                style={{ 
-                  color: '#fc8181', 
-                  fontSize: '0.85rem', 
-                  backgroundColor: 'rgba(229, 62, 62, 0.15)', 
-                  border: '1px solid rgba(229, 62, 62, 0.2)',
-                  borderRadius: '6px', 
-                  padding: '10px 14px',
-                  lineHeight: 1.4,
-                  textAlign: 'left'
-                }}
-              >
-                ⚠️ {loginError}
+              <div style={{ color: '#c53030', backgroundColor: '#fff5f5', padding: '10px', borderRadius: '6px', fontSize: '0.82rem' }}>
+                {loginError}
               </div>
             )}
 
-            {/* Submit */}
             <button
               type="submit"
               style={{
-                width: '100%',
-                padding: '12px',
                 backgroundColor: '#b5632a',
                 color: '#fff',
-                border: 'none',
+                padding: '12px',
                 borderRadius: '8px',
-                fontSize: '0.95rem',
+                border: 'none',
                 fontWeight: 600,
+                fontSize: '0.95rem',
                 cursor: 'pointer',
-                transition: 'background-color 0.2s, transform 0.1s'
+                marginTop: '8px',
               }}
-              onMouseEnter={(e) => (e.currentTarget.style.backgroundColor = '#9a5120')}
-              onMouseLeave={(e) => (e.currentTarget.style.backgroundColor = '#b5632a')}
-              onMouseDown={(e) => (e.currentTarget.style.transform = 'scale(0.98)')}
-              onMouseUp={(e) => (e.currentTarget.style.transform = 'scale(1)')}
             >
-              Sign In
+              Sign In to Admin
             </button>
           </form>
-        </div>
 
-        <Link href="/" style={{ marginTop: '24px', color: '#c5b6a5', fontSize: '0.9rem', textDecoration: 'none', transition: 'color 0.2s' }} onMouseEnter={(e) => (e.currentTarget.style.color = '#fff')} onMouseLeave={(e) => (e.currentTarget.style.color = '#c5b6a5')}>
-          ← Return to Live Store
-        </Link>
+          <div style={{ textAlign: 'center', marginTop: '20px' }}>
+            <Link href="/" style={{ fontSize: '0.82rem', color: '#8c7d6b', textDecoration: 'none' }}>
+              ← Return to Main Website
+            </Link>
+          </div>
+        </div>
       </div>
     );
   }
 
   return (
-    <div className="admin-layout" style={{ minHeight: '100vh', backgroundColor: '#fdfbfa', color: '#251b14', fontFamily: 'system-ui, -apple-system, sans-serif' }}>
-      {/* Header */}
-      <header style={{ backgroundColor: '#251b14', color: '#f7f0e8', padding: '20px 40px', display: 'flex', justifyContent: 'space-between', alignItems: 'center', boxShadow: '0 4px 20px rgba(0,0,0,0.1)' }}>
-        <div style={{ display: 'flex', alignItems: 'center', gap: '16px' }}>
-          <Image src="/logohoh.png" alt="Hands of Heritage logo" width={44} height={40} />
-          <div>
-            <h1 style={{ margin: 0, fontSize: '1.4rem', fontFamily: 'Georgia, serif', fontWeight: 'normal', letterSpacing: '1px' }}>Hands of Heritage</h1>
-            <span style={{ fontSize: '0.8rem', color: '#c5b6a5', letterSpacing: '0.5px' }}>QUOTE ENQUIRY ADMIN PANEL</span>
+    <div style={{ minHeight: '100vh', backgroundColor: '#fcfaf7', color: '#251b14', fontFamily: 'system-ui, -apple-system, sans-serif' }}>
+      {/* Top Header */}
+      <header
+        style={{
+          backgroundColor: '#fff',
+          borderBottom: '1px solid rgba(37,27,20,0.08)',
+          padding: '16px 40px',
+          display: 'flex',
+          justifyContent: 'space-between',
+          alignItems: 'center',
+          position: 'sticky',
+          top: 0,
+          zIndex: 100,
+          boxShadow: '0 2px 10px rgba(0,0,0,0.02)',
+        }}
+      >
+        <div style={{ display: 'flex', alignItems: 'center', gap: '20px' }}>
+          <Link href="/" style={{ display: 'flex', alignItems: 'center', gap: '10px', textDecoration: 'none' }}>
+            <div style={{ position: 'relative', width: '36px', height: '36px' }}>
+              <Image src="/logohoh.png" alt="Hands of Heritage Logo" fill style={{ objectFit: 'contain' }} />
+            </div>
+            <div>
+              <span style={{ fontSize: '0.7rem', letterSpacing: '0.15em', textTransform: 'uppercase', color: '#b5632a', display: 'block', fontWeight: 600 }}>Hands of Heritage</span>
+              <strong style={{ fontFamily: 'Georgia, serif', fontSize: '1.1rem', color: '#251b14' }}>Enquiry Pipeline</strong>
+            </div>
+          </Link>
+
+          {/* Navigation Tabs */}
+          <div style={{ display: 'flex', gap: '6px', marginLeft: '24px', backgroundColor: '#f5efe8', padding: '4px', borderRadius: '8px' }}>
+            <button
+              onClick={() => setActiveTab('list')}
+              style={{
+                padding: '6px 16px',
+                borderRadius: '6px',
+                border: 'none',
+                backgroundColor: activeTab === 'list' ? '#fff' : 'transparent',
+                color: activeTab === 'list' ? '#251b14' : '#7c6950',
+                fontWeight: activeTab === 'list' ? 600 : 500,
+                cursor: 'pointer',
+                fontSize: '0.85rem',
+                boxShadow: activeTab === 'list' ? '0 2px 6px rgba(0,0,0,0.05)' : 'none',
+              }}
+            >
+              📋 All Enquiries ({quotes.length})
+            </button>
+            <button
+              onClick={() => setActiveTab('analytics')}
+              style={{
+                padding: '6px 16px',
+                borderRadius: '6px',
+                border: 'none',
+                backgroundColor: activeTab === 'analytics' ? '#fff' : 'transparent',
+                color: activeTab === 'analytics' ? '#251b14' : '#7c6950',
+                fontWeight: activeTab === 'analytics' ? 600 : 500,
+                cursor: 'pointer',
+                fontSize: '0.85rem',
+                boxShadow: activeTab === 'analytics' ? '0 2px 6px rgba(0,0,0,0.05)' : 'none',
+              }}
+            >
+              📊 Analytics & Deals
+            </button>
           </div>
         </div>
-        <div style={{ display: 'flex', gap: '12px', alignItems: 'center' }}>
-          <Link href="/" style={{ color: '#f7f0e8', textDecoration: 'none', border: '1px solid #c5b6a5', padding: '8px 16px', borderRadius: '4px', fontSize: '0.9rem', transition: 'all 0.2s' }}>
-            Back to Live Site
-          </Link>
+
+        <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+          <button
+            onClick={() => setShowSecurityModal(true)}
+            style={{
+              padding: '8px 14px',
+              backgroundColor: '#f7f3ee',
+              border: '1px solid #d9cebf',
+              borderRadius: '6px',
+              fontSize: '0.82rem',
+              fontWeight: 600,
+              color: '#5f4f3b',
+              cursor: 'pointer',
+              display: 'flex',
+              alignItems: 'center',
+              gap: '6px',
+            }}
+          >
+            🛡️ Security & Privacy
+          </button>
+          <button
+            onClick={exportToCSV}
+            style={{
+              padding: '8px 14px',
+              backgroundColor: '#2d6a37',
+              border: 'none',
+              borderRadius: '6px',
+              fontSize: '0.82rem',
+              fontWeight: 600,
+              color: '#ffffff',
+              cursor: 'pointer',
+              display: 'flex',
+              alignItems: 'center',
+              gap: '6px',
+            }}
+          >
+            📥 Export CSV
+          </button>
           <button
             onClick={handleLogout}
-            style={{ backgroundColor: 'transparent', border: '1px solid #c53030', color: '#fc8181', padding: '8px 16px', borderRadius: '4px', fontSize: '0.9rem', cursor: 'pointer', transition: 'all 0.2s' }}
-            onMouseEnter={(e) => (e.currentTarget.style.backgroundColor = '#c53030')}
-            onMouseLeave={(e) => (e.currentTarget.style.backgroundColor = 'transparent')}
+            style={{
+              padding: '8px 14px',
+              backgroundColor: '#fff',
+              border: '1px solid #ced4da',
+              borderRadius: '6px',
+              fontSize: '0.82rem',
+              cursor: 'pointer',
+              color: '#5f4f3b',
+            }}
           >
-            Logout
+            Log Out
           </button>
         </div>
       </header>
 
-      {/* Tabs Menu */}
-      <div style={{ display: 'flex', borderBottom: '1px solid rgba(37,27,20,0.08)', padding: '0 40px', backgroundColor: '#fff' }}>
-        <button
-          onClick={() => setActiveTab('list')}
-          style={{
-            padding: '16px 24px',
-            background: 'none',
-            border: 'none',
-            borderBottom: activeTab === 'list' ? '2px solid #b5632a' : '2px solid transparent',
-            color: activeTab === 'list' ? '#b5632a' : '#5f4f3b',
-            fontWeight: activeTab === 'list' ? 600 : 400,
-            cursor: 'pointer',
-            fontSize: '0.95rem',
-            transition: 'all 0.2s',
-            outline: 'none',
-          }}
-        >
-          📋 Enquiry List
-        </button>
-        <button
-          onClick={() => setActiveTab('analytics')}
-          style={{
-            padding: '16px 24px',
-            background: 'none',
-            border: 'none',
-            borderBottom: activeTab === 'analytics' ? '2px solid #b5632a' : '2px solid transparent',
-            color: activeTab === 'analytics' ? '#b5632a' : '#5f4f3b',
-            fontWeight: activeTab === 'analytics' ? 600 : 400,
-            cursor: 'pointer',
-            fontSize: '0.95rem',
-            transition: 'all 0.2s',
-            outline: 'none',
-          }}
-        >
-          📈 Analytics Dashboard
-        </button>
-      </div>
-
       {/* Main Container */}
-      <main style={{ padding: '40px' }}>
-        
-        {/* VIEW 1: ENQUIRY LIST VIEW */}
+      <main style={{ padding: '32px 40px' }}>
         {activeTab === 'list' && (
           <>
-            {/* Stats Dashboard */}
-            <section style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: '20px', marginBottom: '40px' }}>
-              <div style={{ backgroundColor: '#fff', border: '1px solid rgba(37,27,20,0.08)', borderRadius: '12px', padding: '24px', boxShadow: '0 4px 12px rgba(0,0,0,0.02)' }}>
-                <span style={{ fontSize: '0.85rem', color: '#5f4f3b', fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.5px' }}>Total Enquiries</span>
-                <p style={{ margin: '8px 0 0', fontSize: '2.5rem', fontWeight: 300, color: '#251b14' }}>{stats.total}</p>
+            {/* KPI Cards */}
+            <section style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(210px, 1fr))', gap: '18px', marginBottom: '32px' }}>
+              <div style={{ backgroundColor: '#fff', border: '1px solid rgba(37,27,20,0.08)', borderRadius: '12px', padding: '20px', boxShadow: '0 2px 8px rgba(0,0,0,0.02)' }}>
+                <span style={{ fontSize: '0.8rem', color: '#7c6950', fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.05em' }}>Total Leads</span>
+                <p style={{ margin: '6px 0 0', fontSize: '2.2rem', fontWeight: 400, color: '#251b14' }}>{stats.total}</p>
               </div>
-              <div style={{ backgroundColor: '#fff', border: '1px solid rgba(37,27,20,0.08)', borderRadius: '12px', padding: '24px', boxShadow: '0 4px 12px rgba(0,0,0,0.02)' }}>
-                <span style={{ fontSize: '0.85rem', color: '#b5632a', fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.5px' }}>New Requests</span>
-                <p style={{ margin: '8px 0 0', fontSize: '2.5rem', fontWeight: 400, color: '#b5632a' }}>{stats.newCount}</p>
+              <div style={{ backgroundColor: '#fff', border: '1px solid rgba(37,27,20,0.08)', borderRadius: '12px', padding: '20px', boxShadow: '0 2px 8px rgba(0,0,0,0.02)' }}>
+                <span style={{ fontSize: '0.8rem', color: '#1e40af', fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.05em' }}>New Unactioned</span>
+                <p style={{ margin: '6px 0 0', fontSize: '2.2rem', fontWeight: 600, color: '#1e40af' }}>{stats.newCount}</p>
               </div>
-              <div style={{ backgroundColor: '#fff', border: '1px solid rgba(37,27,20,0.08)', borderRadius: '12px', padding: '24px', boxShadow: '0 4px 12px rgba(0,0,0,0.02)' }}>
-                <span style={{ fontSize: '0.85rem', color: '#4d684f', fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.5px' }}>In Conversation</span>
-                <p style={{ margin: '8px 0 0', fontSize: '2.5rem', fontWeight: 300, color: '#4d684f' }}>{stats.contactedCount}</p>
+              <div style={{ backgroundColor: '#fff', border: '1px solid rgba(37,27,20,0.08)', borderRadius: '12px', padding: '20px', boxShadow: '0 2px 8px rgba(0,0,0,0.02)' }}>
+                <span style={{ fontSize: '0.8rem', color: '#b5632a', fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.05em' }}>Active Pipeline</span>
+                <p style={{ margin: '6px 0 0', fontSize: '2.2rem', fontWeight: 400, color: '#b5632a' }}>{stats.activeCount}</p>
               </div>
-              <div style={{ backgroundColor: '#fff', border: '1px solid rgba(37,27,20,0.08)', borderRadius: '12px', padding: '24px', boxShadow: '0 4px 12px rgba(0,0,0,0.02)' }}>
-                <span style={{ fontSize: '0.85rem', color: '#251b14', fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.5px' }}>Unique Items Selected</span>
-                <p style={{ margin: '8px 0 0', fontSize: '2.5rem', fontWeight: 300, color: '#251b14' }}>{stats.totalItemsRequested}</p>
+              <div style={{ backgroundColor: '#fff', border: '1px solid rgba(37,27,20,0.08)', borderRadius: '12px', padding: '20px', boxShadow: '0 2px 8px rgba(0,0,0,0.02)' }}>
+                <span style={{ fontSize: '0.8rem', color: '#166534', fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.05em' }}>Won Orders</span>
+                <p style={{ margin: '6px 0 0', fontSize: '2.2rem', fontWeight: 600, color: '#166534' }}>{stats.wonCount}</p>
+              </div>
+              <div style={{ backgroundColor: '#fff', border: '1px solid rgba(37,27,20,0.08)', borderRadius: '12px', padding: '20px', boxShadow: '0 2px 8px rgba(0,0,0,0.02)' }}>
+                <span style={{ fontSize: '0.8rem', color: '#5f4f3b', fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.05em' }}>Physical Units</span>
+                <p style={{ margin: '6px 0 0', fontSize: '2.2rem', fontWeight: 300, color: '#251b14' }}>{stats.totalPhysicalUnits.toLocaleString()}</p>
               </div>
             </section>
 
-            {/* Toolbar */}
-            <section style={{ backgroundColor: '#fff', border: '1px solid rgba(37,27,20,0.08)', borderRadius: '12px 12px 0 0', padding: '20px 24px', display: 'flex', flexWrap: 'wrap', gap: '20px', alignItems: 'center', justifyContent: 'space-between', borderBottom: 'none' }}>
-              <div style={{ display: 'flex', gap: '16px', flexWrap: 'wrap', alignItems: 'center' }}>
-                {/* Search Input */}
+            {/* Filter Toolbar */}
+            <section
+              style={{
+                backgroundColor: '#fff',
+                border: '1px solid rgba(37,27,20,0.08)',
+                borderRadius: '12px 12px 0 0',
+                padding: '16px 20px',
+                display: 'flex',
+                flexWrap: 'wrap',
+                gap: '16px',
+                alignItems: 'center',
+                justifyContent: 'space-between',
+                borderBottom: 'none',
+              }}
+            >
+              <div style={{ display: 'flex', gap: '14px', flexWrap: 'wrap', alignItems: 'center' }}>
+                {/* Search */}
                 <input
                   type="text"
-                  placeholder="Search client, email, phone or item..."
+                  placeholder="🔍 Search client, email, ref, phone, product..."
                   value={searchTerm}
                   onChange={(e) => setSearchTerm(e.target.value)}
-                  style={{ padding: '10px 16px', border: '1px solid #c5b6a5', borderRadius: '6px', fontSize: '0.9rem', width: '280px', outline: 'none', backgroundColor: '#fdfcfa' }}
+                  style={{
+                    padding: '8px 14px',
+                    border: '1px solid #c5b6a5',
+                    borderRadius: '6px',
+                    fontSize: '0.88rem',
+                    width: '300px',
+                    outline: 'none',
+                    backgroundColor: '#fdfcfa',
+                  }}
                 />
-                
+
                 {/* Status Filter */}
-                <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                  <span style={{ fontSize: '0.85rem', color: '#5f4f3b' }}>Status:</span>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                  <span style={{ fontSize: '0.82rem', color: '#5f4f3b', fontWeight: 600 }}>Status:</span>
                   <select
                     value={statusFilter}
                     onChange={(e) => setStatusFilter(e.target.value)}
-                    style={{ padding: '8px 12px', border: '1px solid #c5b6a5', borderRadius: '6px', fontSize: '0.9rem', outline: 'none', cursor: 'pointer', backgroundColor: '#fff' }}
+                    style={{ padding: '8px 10px', border: '1px solid #c5b6a5', borderRadius: '6px', fontSize: '0.86rem', outline: 'none', backgroundColor: '#fff' }}
                   >
-                    <option value="all">All Statuses</option>
-                    <option value="New">New</option>
-                    <option value="Contacted">Contacted</option>
-                    <option value="Archived">Archived</option>
+                    <option value="all">All Statuses ({quotes.length})</option>
+                    {ALL_STATUSES.map((st) => (
+                      <option key={st} value={st}>
+                        {st} ({quotes.filter((q) => q.status === st).length})
+                      </option>
+                    ))}
+                  </select>
+                </div>
+
+                {/* Lead Owner Filter */}
+                <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                  <span style={{ fontSize: '0.82rem', color: '#5f4f3b', fontWeight: 600 }}>Owner:</span>
+                  <select
+                    value={ownerFilter}
+                    onChange={(e) => setOwnerFilter(e.target.value)}
+                    style={{ padding: '8px 10px', border: '1px solid #c5b6a5', borderRadius: '6px', fontSize: '0.86rem', outline: 'none', backgroundColor: '#fff' }}
+                  >
+                    <option value="all">All Owners</option>
+                    <option value="Latika">Latika</option>
+                    <option value="Karan">Karan</option>
+                    <option value="Unassigned">Unassigned</option>
                   </select>
                 </div>
 
                 {/* Type Filter */}
-                <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                  <span style={{ fontSize: '0.85rem', color: '#5f4f3b' }}>Type:</span>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                  <span style={{ fontSize: '0.82rem', color: '#5f4f3b', fontWeight: 600 }}>Type:</span>
                   <select
                     value={typeFilter}
                     onChange={(e) => setTypeFilter(e.target.value)}
-                    style={{ padding: '8px 12px', border: '1px solid #c5b6a5', borderRadius: '6px', fontSize: '0.9rem', outline: 'none', cursor: 'pointer', backgroundColor: '#fff' }}
+                    style={{ padding: '8px 10px', border: '1px solid #c5b6a5', borderRadius: '6px', fontSize: '0.86rem', outline: 'none', backgroundColor: '#fff' }}
                   >
                     <option value="all">All Types</option>
-                    <option value="basket">Basket Quote</option>
+                    <option value="basket">Basket Shortlist</option>
                     <option value="single">Single Item</option>
                   </select>
                 </div>
               </div>
-              
-              <button
-                onClick={fetchQuotes}
-                style={{ padding: '10px 16px', backgroundColor: '#f7f0e8', border: '1px solid #c5b6a5', borderRadius: '6px', cursor: 'pointer', fontSize: '0.9rem', fontWeight: 500, color: '#5f4f3b', display: 'flex', gap: '6px', alignItems: 'center' }}
-              >
-                🔄 Refresh
-              </button>
+
+              <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                <span style={{ fontSize: '0.8rem', color: '#7c6950' }}>
+                  Showing <strong>{filteredQuotes.length}</strong> of {quotes.length} leads
+                </span>
+              </div>
             </section>
 
-            {/* Data Table */}
+            {/* Leads Table */}
             <section style={{ backgroundColor: '#fff', border: '1px solid rgba(37,27,20,0.08)', borderRadius: '0 0 12px 12px', overflow: 'hidden', boxShadow: '0 4px 15px rgba(0,0,0,0.02)' }}>
               {loading ? (
                 <div style={{ padding: '60px', textAlign: 'center', color: '#5f4f3b' }}>
-                  <div style={{ display: 'inline-block', width: '30px', height: '30px', border: '3px solid rgba(181, 99, 42, 0.3)', borderTopColor: '#b5632a', borderRadius: '50%', animation: 'spin 1s linear infinite' }}></div>
-                  <p style={{ marginTop: '16px', fontSize: '0.95rem' }}>Loading quote data...</p>
+                  <p style={{ fontSize: '0.95rem' }}>Syncing enquiries in real-time with Firebase...</p>
                 </div>
               ) : error ? (
                 <div style={{ padding: '60px', textAlign: 'center', color: '#d9534f' }}>
                   <p style={{ fontSize: '1.1rem', margin: 0 }}>⚠️ {error}</p>
-                  <button onClick={fetchQuotes} style={{ marginTop: '16px', padding: '8px 16px', backgroundColor: '#f2dede', border: '1px solid #ebccd1', borderRadius: '4px', color: '#a94442', cursor: 'pointer' }}>Retry</button>
                 </div>
               ) : filteredQuotes.length === 0 ? (
-                <div style={{ padding: '80px 40px', textAlign: 'center', color: '#5f4f3b' }}>
-                  <p style={{ fontSize: '1.2rem', margin: 0, fontWeight: 300 }}>No matching quote requests found.</p>
-                  <p style={{ fontSize: '0.9rem', color: '#8c7d6b', marginTop: '8px' }}>Submit a quote from the front end, or clear search queries/filters.</p>
+                <div style={{ padding: '60px 20px', textAlign: 'center', color: '#5f4f3b' }}>
+                  <p style={{ fontSize: '1.1rem', margin: 0 }}>No matching quote enquiries found.</p>
+                  <small style={{ color: '#8c7d6b' }}>Try clearing your filters or submit a new test quote from the website.</small>
                 </div>
               ) : (
                 <div style={{ overflowX: 'auto' }}>
-                  <table style={{ width: '100%', borderCollapse: 'collapse', textAlign: 'left', minWidth: '850px' }}>
+                  <table style={{ width: '100%', borderCollapse: 'collapse', textAlign: 'left', minWidth: '950px' }}>
                     <thead>
                       <tr style={{ backgroundColor: '#f7f5f2', borderBottom: '1px solid rgba(37,27,20,0.08)' }}>
-                        <th style={{ padding: '16px 24px', fontSize: '0.8rem', fontWeight: 600, color: '#5f4f3b', textTransform: 'uppercase', width: '150px' }}>Received</th>
-                        <th style={{ padding: '16px 24px', fontSize: '0.8rem', fontWeight: 600, color: '#5f4f3b', textTransform: 'uppercase', width: '220px' }}>Client</th>
-                        <th style={{ padding: '16px 24px', fontSize: '0.8rem', fontWeight: 600, color: '#5f4f3b', textTransform: 'uppercase', width: '110px' }}>Type</th>
-                        <th style={{ padding: '16px 24px', fontSize: '0.8rem', fontWeight: 600, color: '#5f4f3b', textTransform: 'uppercase' }}>Details</th>
-                        <th style={{ padding: '16px 24px', fontSize: '0.8rem', fontWeight: 600, color: '#5f4f3b', textTransform: 'uppercase', width: '110px' }}>Status</th>
-                        <th style={{ padding: '16px 24px', fontSize: '0.8rem', fontWeight: 600, color: '#5f4f3b', textTransform: 'uppercase', width: '180px', textAlign: 'right' }}>Actions</th>
+                        <th style={{ padding: '14px 20px', fontSize: '0.78rem', fontWeight: 600, color: '#5f4f3b', textTransform: 'uppercase' }}>Received (UK)</th>
+                        <th style={{ padding: '14px 20px', fontSize: '0.78rem', fontWeight: 600, color: '#5f4f3b', textTransform: 'uppercase' }}>Ref / Client</th>
+                        <th style={{ padding: '14px 20px', fontSize: '0.78rem', fontWeight: 600, color: '#5f4f3b', textTransform: 'uppercase' }}>Owner</th>
+                        <th style={{ padding: '14px 20px', fontSize: '0.78rem', fontWeight: 600, color: '#5f4f3b', textTransform: 'uppercase' }}>Items & Units</th>
+                        <th style={{ padding: '14px 20px', fontSize: '0.78rem', fontWeight: 600, color: '#5f4f3b', textTransform: 'uppercase' }}>Status</th>
+                        <th style={{ padding: '14px 20px', fontSize: '0.78rem', fontWeight: 600, color: '#5f4f3b', textTransform: 'uppercase', textAlign: 'right' }}>Quick Actions</th>
                       </tr>
                     </thead>
                     <tbody>
                       {filteredQuotes.map((quote) => {
-                        const receivedDate = new Date(quote.createdAt).toLocaleDateString('en-US', {
-                          month: 'short',
+                        const ukReceivedDate = new Date(quote.createdAt).toLocaleDateString('en-GB', {
                           day: 'numeric',
+                          month: 'short',
+                          year: 'numeric',
                           hour: '2-digit',
                           minute: '2-digit',
                         });
-                        
+
+                        const totalUnits = quote.items.reduce((acc, i) => acc + (i.quantity || 1), 0);
+                        const linesCount = quote.items.length;
+                        const stStyle = statusStyles[quote.status] || statusStyles['New'];
+                        const cleanPhone = quote.phone ? quote.phone.replace(/[^0-9+]/g, '') : '';
+
                         return (
                           <tr
                             key={quote.id}
@@ -620,92 +791,130 @@ export default function AdminDashboard() {
                             onMouseEnter={(e) => (e.currentTarget.style.backgroundColor = '#fdfbfa')}
                             onMouseLeave={(e) => (e.currentTarget.style.backgroundColor = 'transparent')}
                           >
-                            <td style={{ padding: '18px 24px', fontSize: '0.9rem', color: '#5f4f3b' }}>
-                              {receivedDate}
+                            <td style={{ padding: '16px 20px', fontSize: '0.86rem', color: '#5f4f3b', whiteSpace: 'nowrap' }}>
+                              {ukReceivedDate}
                             </td>
-                            <td style={{ padding: '18px 24px' }}>
-                              <p style={{ margin: 0, fontWeight: 600, fontSize: '0.95rem', color: '#251b14' }}>{quote.name}</p>
-                              <small style={{ color: '#8c7d6b', fontSize: '0.8rem', display: 'block' }}>{quote.email}</small>
-                              {quote.phone && <small style={{ color: '#8c7d6b', fontSize: '0.8rem', display: 'block' }}>{quote.phone}</small>}
+
+                            <td style={{ padding: '16px 20px' }}>
+                              <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                                <strong style={{ color: '#251b14', fontSize: '0.94rem' }}>{quote.name}</strong>
+                                {quote.refId && (
+                                  <span style={{ fontSize: '0.72rem', backgroundColor: '#f5efe8', color: '#b5632a', padding: '1px 6px', borderRadius: '4px', fontWeight: 600 }}>
+                                    {quote.refId}
+                                  </span>
+                                )}
+                              </div>
+                              <small style={{ color: '#7c6950', fontSize: '0.8rem', display: 'block' }}>{quote.email}</small>
+                              {quote.phone && <small style={{ color: '#7c6950', fontSize: '0.8rem', display: 'block' }}>{quote.phone}</small>}
                             </td>
-                            <td style={{ padding: '18px 24px' }}>
-                              <span style={{
-                                fontSize: '0.75rem',
-                                fontWeight: 600,
-                                padding: '4px 8px',
-                                borderRadius: '12px',
-                                textTransform: 'uppercase',
-                                backgroundColor: quote.type === 'basket' ? '#eef4fb' : '#fef2f2',
-                                color: quote.type === 'basket' ? '#1c3d5a' : '#7f1d1d',
-                              }}>
-                                {quote.type === 'basket' ? '💼 Basket' : '🛍️ Single'}
+
+                            <td style={{ padding: '16px 20px' }}>
+                              <span
+                                style={{
+                                  fontSize: '0.78rem',
+                                  fontWeight: 600,
+                                  padding: '3px 8px',
+                                  borderRadius: '6px',
+                                  backgroundColor: quote.owner === 'Latika' ? '#fdf2f8' : quote.owner === 'Karan' ? '#eff6ff' : '#f3f4f6',
+                                  color: quote.owner === 'Latika' ? '#9d174d' : quote.owner === 'Karan' ? '#1d4ed8' : '#4b5563',
+                                }}
+                              >
+                                {quote.owner || 'Unassigned'}
                               </span>
-                            </td>
-                            <td style={{ padding: '18px 24px', fontSize: '0.9rem', color: '#5f4f3b' }}>
-                              {quote.type === 'basket' ? (
-                                <div>
-                                  <span><strong>{quote.items.length} items</strong> for {quote.eventType || 'Event'}</span>
-                                  {quote.guestCount ? <span style={{ color: '#8c7d6b' }}> • {quote.guestCount} guests</span> : null}
-                                </div>
-                              ) : (
-                                <div>
-                                  <span><strong>Enquiry: </strong> {quote.items[0]?.name || 'Item'}</span>
-                                  {quote.quantity ? <span style={{ color: '#8c7d6b' }}> ({quote.quantity} units)</span> : null}
-                                </div>
+                              {quote.nextAction && (
+                                <small style={{ display: 'block', color: '#7c6950', fontSize: '0.75rem', marginTop: '2px', maxWidth: '140px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                                  {quote.nextAction}
+                                </small>
                               )}
                             </td>
-                            <td style={{ padding: '18px 24px' }}>
-                              <span style={{
-                                fontSize: '0.75rem',
-                                fontWeight: 600,
-                                padding: '4px 10px',
-                                borderRadius: '12px',
-                                backgroundColor: 
-                                  quote.status === 'New' ? '#fff3cd' : 
-                                  quote.status === 'Contacted' ? '#d4edda' : '#e2e3e5',
-                                color: 
-                                  quote.status === 'New' ? '#856404' : 
-                                  quote.status === 'Contacted' ? '#155724' : '#383d41',
-                              }}>
+
+                            <td style={{ padding: '16px 20px', fontSize: '0.88rem', color: '#5f4f3b' }}>
+                              <div>
+                                <strong>
+                                  {linesCount} {linesCount === 1 ? 'item' : 'items'}
+                                </strong>{' '}
+                                • <span style={{ color: '#b5632a', fontWeight: 700 }}>{totalUnits} units</span>
+                              </div>
+                              <small style={{ color: '#8c7d6b', fontSize: '0.78rem' }}>
+                                {quote.eventType || quote.occasion || 'Wedding / Celebration'}
+                                {quote.eventDate ? ` • ${quote.eventDate}` : ''}
+                              </small>
+                            </td>
+
+                            <td style={{ padding: '16px 20px' }}>
+                              <span
+                                style={{
+                                  fontSize: '0.78rem',
+                                  fontWeight: 600,
+                                  padding: '4px 10px',
+                                  borderRadius: '12px',
+                                  backgroundColor: stStyle.bg,
+                                  color: stStyle.color,
+                                  border: `1px solid ${stStyle.border}`,
+                                  display: 'inline-block',
+                                  whiteSpace: 'nowrap',
+                                }}
+                              >
                                 {quote.status}
                               </span>
                             </td>
-                            <td style={{ padding: '18px 24px', textAlign: 'right' }} onClick={(e) => e.stopPropagation()}>
-                              <div style={{ display: 'inline-flex', gap: '8px' }}>
-                                {quote.status === 'New' && (
-                                  <button
-                                    onClick={(e) => {
-                                      e.stopPropagation();
-                                      updateStatus(quote.id, 'Contacted');
-                                    }}
-                                    title="Mark as Contacted"
-                                    style={{ padding: '6px 10px', backgroundColor: '#eefcf1', border: '1px solid #c7eed2', borderRadius: '4px', color: '#2e7d32', cursor: 'pointer', fontSize: '0.8rem', fontWeight: 600 }}
-                                  >
-                                    ✓ Contact
-                                  </button>
-                                )}
-                                {quote.status !== 'Archived' && (
-                                  <button
-                                    onClick={(e) => {
-                                      e.stopPropagation();
-                                      updateStatus(quote.id, 'Archived');
-                                    }}
-                                    title="Archive"
-                                    style={{ padding: '6px 10px', backgroundColor: '#f8f9fa', border: '1px solid #ced4da', borderRadius: '4px', color: '#495057', cursor: 'pointer', fontSize: '0.8rem', fontWeight: 500 }}
-                                  >
-                                    📦 Archive
-                                  </button>
-                                )}
-                                <button
-                                  onClick={(e) => {
-                                    e.stopPropagation();
-                                    deleteQuote(quote.id);
+
+                            <td style={{ padding: '16px 20px', textAlign: 'right' }} onClick={(e) => e.stopPropagation()}>
+                              <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '8px', alignItems: 'center' }}>
+                                <a
+                                  href={`mailto:${quote.email}?subject=Your%20Hands%20of%20Heritage%20Quote%20Request`}
+                                  title="Send Email"
+                                  style={{
+                                    padding: '6px 10px',
+                                    backgroundColor: '#fff',
+                                    border: '1px solid #d1d5db',
+                                    borderRadius: '6px',
+                                    fontSize: '0.8rem',
+                                    textDecoration: 'none',
+                                    color: '#374151',
                                   }}
-                                  title="Delete enquiry record"
-                                  style={{ padding: '6px 10px', backgroundColor: '#fff5f5', border: '1px solid #ffd8d8', borderRadius: '4px', color: '#c53030', cursor: 'pointer', fontSize: '0.8rem', fontWeight: 500 }}
                                 >
-                                  🗑️
-                                </button>
+                                  ✉️ Email
+                                </a>
+
+                                {cleanPhone && (
+                                  <a
+                                    href={`https://wa.me/${cleanPhone.replace('+', '')}?text=${encodeURIComponent(`Hi ${quote.name}, thank you for your enquiry with Hands of Heritage.`)}`}
+                                    target="_blank"
+                                    rel="noopener noreferrer"
+                                    title="Open WhatsApp Chat"
+                                    style={{
+                                      padding: '6px 10px',
+                                      backgroundColor: '#dcfce7',
+                                      border: '1px solid #bbf7d0',
+                                      borderRadius: '6px',
+                                      fontSize: '0.8rem',
+                                      textDecoration: 'none',
+                                      color: '#166534',
+                                      fontWeight: 600,
+                                    }}
+                                  >
+                                    💬 WhatsApp
+                                  </a>
+                                )}
+
+                                <select
+                                  value={quote.status}
+                                  onChange={(e) => updateStatus(quote.id, e.target.value as LeadStatus)}
+                                  style={{
+                                    padding: '5px 8px',
+                                    borderRadius: '6px',
+                                    border: '1px solid #d1d5db',
+                                    fontSize: '0.8rem',
+                                    backgroundColor: '#fff',
+                                  }}
+                                >
+                                  {ALL_STATUSES.map((st) => (
+                                    <option key={st} value={st}>
+                                      {st}
+                                    </option>
+                                  ))}
+                                </select>
                               </div>
                             </td>
                           </tr>
@@ -719,418 +928,412 @@ export default function AdminDashboard() {
           </>
         )}
 
-        {/* VIEW 2: ANALYTICS OVERVIEW VIEW */}
+        {/* VIEW 2: ANALYTICS & PIPELINE */}
         {activeTab === 'analytics' && (
-          <>
-            {loading ? (
-              <div style={{ padding: '60px', textAlign: 'center', color: '#5f4f3b' }}>
-                <div style={{ display: 'inline-block', width: '30px', height: '30px', border: '3px solid rgba(181, 99, 42, 0.3)', borderTopColor: '#b5632a', borderRadius: '50%', animation: 'spin 1s linear infinite' }}></div>
-                <p style={{ marginTop: '16px', fontSize: '0.95rem' }}>Evaluating pipeline analytics...</p>
+          <section style={{ display: 'flex', flexDirection: 'column', gap: '28px' }}>
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(260px, 1fr))', gap: '20px' }}>
+              <div style={{ backgroundColor: '#fff', padding: '24px', borderRadius: '12px', border: '1px solid rgba(37,27,20,0.08)' }}>
+                <span style={{ fontSize: '0.82rem', color: '#7c6950', fontWeight: 600, textTransform: 'uppercase' }}>Est. Pipeline Value</span>
+                <h3 style={{ margin: '8px 0 0', fontSize: '2.2rem', color: '#b5632a' }}>
+                  ₹{analytics.pipelineValue.toLocaleString('en-IN')}
+                </h3>
+                <small style={{ color: '#8c7d6b' }}>Calculated across all requested unit volumes</small>
               </div>
-            ) : quotes.length === 0 ? (
-              <div style={{ backgroundColor: '#fff', border: '1px solid rgba(37,27,20,0.08)', borderRadius: '12px', padding: '60px', textAlign: 'center', color: '#5f4f3b' }}>
-                <p style={{ fontSize: '1.2rem', margin: 0, fontWeight: 300 }}>No enquiries available to analyze.</p>
-                <p style={{ fontSize: '0.9rem', color: '#8c7d6b', marginTop: '8px' }}>Submit quote requests from the live store to compile dashboard charts.</p>
+
+              <div style={{ backgroundColor: '#fff', padding: '24px', borderRadius: '12px', border: '1px solid rgba(37,27,20,0.08)' }}>
+                <span style={{ fontSize: '0.82rem', color: '#7c6950', fontWeight: 600, textTransform: 'uppercase' }}>Average Deal Size</span>
+                <h3 style={{ margin: '8px 0 0', fontSize: '2.2rem', color: '#251b14' }}>
+                  ₹{analytics.avgDealValue.toLocaleString('en-IN')}
+                </h3>
+                <small style={{ color: '#8c7d6b' }}>Per quote request submitted</small>
               </div>
-            ) : (
-              <div style={{ display: 'grid', gridTemplateColumns: '1fr', gap: '40px' }}>
-                
-                {/* Financial Summary Cards */}
-                <section style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(320px, 1fr))', gap: '24px' }}>
-                  <div style={{ backgroundColor: '#fff', border: '1px solid rgba(37,27,20,0.08)', borderRadius: '12px', padding: '30px', boxShadow: '0 4px 20px rgba(0,0,0,0.015)' }}>
-                    <span style={{ fontSize: '0.85rem', color: '#8c7d6b', fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.5px' }}>Estimated pipeline value</span>
-                    <h2 style={{ margin: '8px 0 0', fontSize: '3rem', fontWeight: 300, color: '#b5632a', fontFamily: 'Georgia, serif' }}>
-                      ₹{analytics.pipelineValue.toLocaleString('en-IN')}
-                    </h2>
-                    <p style={{ margin: '12px 0 0 0', fontSize: '0.85rem', color: '#8c7d6b' }}>
-                      Based on mock valuation: Copper (₹800), Brass (₹1,200), Marble (₹1,500) per unit.
-                    </p>
-                  </div>
-                  <div style={{ backgroundColor: '#fff', border: '1px solid rgba(37,27,20,0.08)', borderRadius: '12px', padding: '30px', boxShadow: '0 4px 20px rgba(0,0,0,0.015)' }}>
-                    <span style={{ fontSize: '0.85rem', color: '#8c7d6b', fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.5px' }}>Average Estimated Quote value</span>
-                    <h2 style={{ margin: '8px 0 0', fontSize: '3rem', fontWeight: 300, color: '#251b14', fontFamily: 'Georgia, serif' }}>
-                      ₹{analytics.avgDealValue.toLocaleString('en-IN')}
-                    </h2>
-                    <p style={{ margin: '12px 0 0 0', fontSize: '0.85rem', color: '#8c7d6b' }}>
-                      Average deal size calculated across {quotes.length} total active requests.
-                    </p>
-                  </div>
-                </section>
+            </div>
 
-                {/* Main Charts Row */}
-                <section style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(450px, 1fr))', gap: '30px' }}>
-                  
-                  {/* Left Column: Top items & Cities */}
-                  <div style={{ display: 'flex', flexDirection: 'column', gap: '30px' }}>
-                    
-                    {/* Top Requested Products */}
-                    <div style={{ backgroundColor: '#fff', border: '1px solid rgba(37,27,20,0.08)', borderRadius: '12px', padding: '30px', boxShadow: '0 4px 20px rgba(0,0,0,0.01)' }}>
-                      <h3 style={{ margin: '0 0 20px', fontSize: '1.1rem', fontFamily: 'Georgia, serif', color: '#251b14' }}>🔥 Top Requested Products</h3>
-                      <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
-                        {analytics.topProducts.map((prod, index) => (
-                          <div key={prod.name} style={{ display: 'flex', alignItems: 'center', gap: '16px' }}>
-                            <span style={{ fontSize: '1rem', fontWeight: 700, color: '#b5632a', width: '24px' }}>#{index + 1}</span>
-                            <div style={{ position: 'relative', width: '50px', height: '50px', borderRadius: '6px', overflow: 'hidden', flexShrink: 0, border: '1px solid rgba(0,0,0,0.05)' }}>
-                              <Image src={prod.image} alt={prod.name} fill style={{ objectFit: 'cover' }} />
-                            </div>
-                            <div style={{ flex: 1 }}>
-                              <p style={{ margin: 0, fontSize: '0.95rem', fontWeight: 600, color: '#251b14' }}>{prod.name}</p>
-                              <small style={{ color: '#8c7d6b' }}>{prod.material} • {prod.count} units requested</small>
-                            </div>
-                          </div>
-                        ))}
-                      </div>
-                    </div>
-
-                    {/* Top Delivery Cities */}
-                    <div style={{ backgroundColor: '#fff', border: '1px solid rgba(37,27,20,0.08)', borderRadius: '12px', padding: '30px', boxShadow: '0 4px 20px rgba(0,0,0,0.01)' }}>
-                      <h3 style={{ margin: '0 0 20px', fontSize: '1.1rem', fontFamily: 'Georgia, serif', color: '#251b14' }}>📍 Top Delivery Cities</h3>
-                      <div style={{ display: 'flex', flexDirection: 'column', gap: '14px' }}>
-                        {analytics.topCities.length === 0 ? (
-                          <p style={{ margin: 0, color: '#8c7d6b', fontSize: '0.9rem' }}>No delivery cities specified in requests yet.</p>
-                        ) : (
-                          analytics.topCities.map((city, index) => {
-                            const totalQuotesWithCity = quotes.filter(q => q.city).length;
-                            const pct = Math.round((city.count / totalQuotesWithCity) * 100);
-                            return (
-                              <div key={city.name}>
-                                <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.9rem', marginBottom: '6px' }}>
-                                  <span><strong>{index + 1}. {city.name}</strong></span>
-                                  <span style={{ color: '#b5632a', fontWeight: 600 }}>{city.count} requests ({pct}%)</span>
-                                </div>
-                                <div style={{ height: '6px', backgroundColor: '#f5efe8', borderRadius: '3px', overflow: 'hidden' }}>
-                                  <div style={{ width: `${pct}%`, height: '100%', backgroundColor: '#b5632a', borderRadius: '3px' }}></div>
-                                </div>
-                              </div>
-                            );
-                          })
-                        )}
-                      </div>
-                    </div>
-                  </div>
-
-                  {/* Right Column: Material & Category Splits */}
-                  <div style={{ display: 'flex', flexDirection: 'column', gap: '30px' }}>
-                    
-                    {/* Material Share */}
-                    <div style={{ backgroundColor: '#fff', border: '1px solid rgba(37,27,20,0.08)', borderRadius: '12px', padding: '30px', boxShadow: '0 4px 20px rgba(0,0,0,0.01)' }}>
-                      <h3 style={{ margin: '0 0 20px', fontSize: '1.1rem', fontFamily: 'Georgia, serif', color: '#251b14' }}>🎨 Material Share</h3>
-                      <div style={{ display: 'flex', flexDirection: 'column', gap: '18px' }}>
-                        {Object.entries(analytics.materialShare).map(([material, count]) => {
-                          const totalUnits = Object.values(analytics.materialShare).reduce((a, b) => a + b, 0);
-                          const pct = totalUnits > 0 ? Math.round((count / totalUnits) * 100) : 0;
-                          
-                          // Color mapping
-                          const barColor = 
-                            material === 'copper' ? '#b5632a' :
-                            material === 'brass' ? '#d4af37' : '#8fa6a9';
-                          
-                          return (
-                            <div key={material}>
-                              <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.9rem', marginBottom: '6px', textTransform: 'capitalize' }}>
-                                <span><strong>{material}</strong> <span style={{ color: '#8c7d6b', fontSize: '0.8rem' }}>({count.toLocaleString()} units)</span></span>
-                                <span style={{ fontWeight: 600, color: barColor }}>{pct}%</span>
-                              </div>
-                              <div style={{ height: '10px', backgroundColor: '#f5efe8', borderRadius: '5px', overflow: 'hidden' }}>
-                                <div style={{ width: `${pct}%`, height: '100%', backgroundColor: barColor, borderRadius: '5px' }}></div>
-                              </div>
-                            </div>
-                          );
-                        })}
-                      </div>
-                    </div>
-
-                    {/* Occasion Breakdowns */}
-                    <div style={{ backgroundColor: '#fff', border: '1px solid rgba(37,27,20,0.08)', borderRadius: '12px', padding: '30px', boxShadow: '0 4px 20px rgba(0,0,0,0.01)' }}>
-                      <h3 style={{ margin: '0 0 20px', fontSize: '1.1rem', fontFamily: 'Georgia, serif', color: '#251b14' }}>🎉 Top Occasions</h3>
-                      <div style={{ display: 'flex', flexDirection: 'column', gap: '14px' }}>
-                        {analytics.topOccasions.map((occ, index) => {
-                          const totalOccs = quotes.length;
-                          const pct = Math.round((occ.count / totalOccs) * 100);
-                          return (
-                            <div key={occ.name}>
-                              <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.9rem', marginBottom: '6px' }}>
-                                <span><strong>{index + 1}. {occ.name}</strong></span>
-                                <span style={{ color: '#4d684f', fontWeight: 600 }}>{occ.count} requests ({pct}%)</span>
-                              </div>
-                              <div style={{ height: '6px', backgroundColor: '#f5efe8', borderRadius: '3px', overflow: 'hidden' }}>
-                                <div style={{ width: `${pct}%`, height: '100%', backgroundColor: '#4d684f', borderRadius: '3px' }}></div>
-                              </div>
-                            </div>
-                          );
-                        })}
-                      </div>
-                    </div>
-                  </div>
-
-                </section>
-                
-                {/* Category Share Table/Grid */}
-                <section style={{ backgroundColor: '#fff', border: '1px solid rgba(37,27,20,0.08)', borderRadius: '12px', padding: '30px', boxShadow: '0 4px 20px rgba(0,0,0,0.01)' }}>
-                  <h3 style={{ margin: '0 0 20px', fontSize: '1.1rem', fontFamily: 'Georgia, serif', color: '#251b14' }}>📦 Category Popularity</h3>
-                  <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: '20px' }}>
-                    {Object.entries(analytics.categoryShare).map(([category, count]) => {
-                      const totalCats = Object.values(analytics.categoryShare).reduce((a, b) => a + b, 0);
-                      const pct = totalCats > 0 ? Math.round((count / totalCats) * 100) : 0;
-                      return (
-                        <div key={category} style={{ border: '1px solid rgba(37,27,20,0.06)', borderRadius: '8px', padding: '16px', backgroundColor: '#fdfbfa', textTransform: 'capitalize' }}>
-                          <span style={{ fontSize: '0.8rem', color: '#8c7d6b', fontWeight: 600, textTransform: 'uppercase' }}>{category}</span>
-                          <p style={{ margin: '6px 0 0', fontSize: '1.8rem', fontWeight: 300, color: '#251b14' }}>{pct}%</p>
-                          <small style={{ color: '#8c7d6b' }}>{count.toLocaleString()} total units</small>
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(320px, 1fr))', gap: '24px' }}>
+              {/* Product Leaderboard */}
+              <div style={{ backgroundColor: '#fff', padding: '24px', borderRadius: '12px', border: '1px solid rgba(37,27,20,0.08)' }}>
+                <h4 style={{ margin: '0 0 16px', fontFamily: 'Georgia, serif', fontSize: '1.2rem', color: '#251b14' }}>
+                  Most Requested Keepsakes
+                </h4>
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
+                  {analytics.topProducts.map((p, idx) => (
+                    <div key={p.name} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', borderBottom: '1px solid rgba(0,0,0,0.04)', paddingBottom: '8px' }}>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+                        <span style={{ fontWeight: 700, color: '#b5632a', width: '20px' }}>#{idx + 1}</span>
+                        <div style={{ position: 'relative', width: '32px', height: '32px', borderRadius: '4px', overflow: 'hidden' }}>
+                          <Image src={p.image} alt={p.name} fill style={{ objectFit: 'cover' }} />
                         </div>
-                      );
-                    })}
-                  </div>
-                </section>
-                
+                        <span style={{ fontSize: '0.88rem', color: '#251b14', fontWeight: 500 }}>{p.name}</span>
+                      </div>
+                      <strong style={{ color: '#b5632a', fontSize: '0.88rem' }}>{p.count} units</strong>
+                    </div>
+                  ))}
+                </div>
               </div>
-            )}
-          </>
+
+              {/* Material Split */}
+              <div style={{ backgroundColor: '#fff', padding: '24px', borderRadius: '12px', border: '1px solid rgba(37,27,20,0.08)' }}>
+                <h4 style={{ margin: '0 0 16px', fontFamily: 'Georgia, serif', fontSize: '1.2rem', color: '#251b14' }}>
+                  Material Preference Split
+                </h4>
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '14px' }}>
+                  {Object.entries(analytics.materialShare).map(([mat, count]) => (
+                    <div key={mat}>
+                      <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.86rem', marginBottom: '4px' }}>
+                        <span style={{ textTransform: 'capitalize', fontWeight: 600 }}>{mat}</span>
+                        <span>{count} units</span>
+                      </div>
+                      <div style={{ height: '8px', backgroundColor: '#f5efe8', borderRadius: '4px', overflow: 'hidden' }}>
+                        <div
+                          style={{
+                            height: '100%',
+                            width: `${Math.min(100, Math.round((count / (stats.totalPhysicalUnits || 1)) * 100))}%`,
+                            backgroundColor: mat === 'copper' ? '#b5632a' : mat === 'brass' ? '#d97706' : '#6b7280',
+                          }}
+                        />
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            </div>
+          </section>
         )}
       </main>
 
-      {/* Quote Details Modal */}
+      {/* DETAILED LEAD INSPECTION & CRM MODAL */}
       {selectedQuote && (
-        <div
-          style={{ position: 'fixed', inset: 0, backgroundColor: 'rgba(37,27,20,0.6)', zIndex: 1000, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '20px', backdropFilter: 'blur(4px)' }}
-          onClick={() => setSelectedQuote(null)}
-        >
-          <div
-            style={{ backgroundColor: '#fff', borderRadius: '16px', border: '1px solid rgba(37,27,20,0.1)', width: '100%', maxWidth: '750px', maxHeight: '90vh', overflowY: 'auto', boxShadow: '0 20px 50px rgba(0,0,0,0.15)', display: 'flex', flexDirection: 'column' }}
-            onClick={(e) => e.stopPropagation()}
-          >
-            {/* Modal Header */}
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '24px 30px', borderBottom: '1px solid rgba(37,27,20,0.08)', backgroundColor: '#fcfaf7' }}>
-              <div>
-                <span style={{ fontSize: '0.75rem', fontWeight: 600, color: '#b5632a', textTransform: 'uppercase', letterSpacing: '0.5px' }}>
-                  {selectedQuote.type === 'basket' ? 'Enquiry Basket Details' : 'Product Enquiry Details'}
-                </span>
-                <h2 style={{ margin: '4px 0 0', fontFamily: 'Georgia, serif', fontWeight: 'normal', fontSize: '1.5rem', color: '#251b14' }}>
-                  Enquiry ID: {selectedQuote.id.slice(2, 12)}
-                </h2>
-              </div>
-              <button
-                onClick={() => setSelectedQuote(null)}
-                style={{ background: 'none', border: 'none', fontSize: '1.8rem', cursor: 'pointer', color: '#8c7d6b', padding: '0 4px', lineHeight: 1 }}
-              >
-                &times;
-              </button>
-            </div>
-
-            {/* Modal Body */}
-            <div style={{ padding: '30px', flex: 1 }}>
-              
-              {/* Status and Action bar */}
-              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '16px', padding: '16px 20px', backgroundColor: '#fdfbfa', border: '1px solid rgba(37,27,20,0.06)', borderRadius: '8px', marginBottom: '24px' }}>
-                <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
-                  <span style={{ fontSize: '0.9rem', color: '#5f4f3b' }}>Status:</span>
-                  <span style={{
-                    fontSize: '0.8rem',
-                    fontWeight: 600,
-                    padding: '4px 12px',
-                    borderRadius: '12px',
-                    backgroundColor: 
-                      selectedQuote.status === 'New' ? '#fff3cd' : 
-                      selectedQuote.status === 'Contacted' ? '#d4edda' : '#e2e3e5',
-                    color: 
-                      selectedQuote.status === 'New' ? '#856404' : 
-                      selectedQuote.status === 'Contacted' ? '#155724' : '#383d41',
-                  }}>
-                    {selectedQuote.status}
-                  </span>
-                </div>
-                <div style={{ display: 'flex', gap: '8px' }}>
-                  <button
-                    onClick={() => updateStatus(selectedQuote.id, 'New')}
-                    disabled={selectedQuote.status === 'New'}
-                    style={{ padding: '6px 12px', border: '1px solid #ced4da', borderRadius: '4px', cursor: 'pointer', fontSize: '0.8rem', opacity: selectedQuote.status === 'New' ? 0.5 : 1, backgroundColor: '#fff', color: '#333' }}
-                  >
-                    Mark New
-                  </button>
-                  <button
-                    onClick={() => updateStatus(selectedQuote.id, 'Contacted')}
-                    disabled={selectedQuote.status === 'Contacted'}
-                    style={{ padding: '6px 12px', border: '1px solid #ced4da', borderRadius: '4px', cursor: 'pointer', fontSize: '0.8rem', opacity: selectedQuote.status === 'Contacted' ? 0.5 : 1, backgroundColor: '#fff', color: '#333' }}
-                  >
-                    Mark Contacted
-                  </button>
-                  <button
-                    onClick={() => updateStatus(selectedQuote.id, 'Archived')}
-                    disabled={selectedQuote.status === 'Archived'}
-                    style={{ padding: '6px 12px', border: '1px solid #ced4da', borderRadius: '4px', cursor: 'pointer', fontSize: '0.8rem', opacity: selectedQuote.status === 'Archived' ? 0.5 : 1, backgroundColor: '#fff', color: '#333' }}
-                  >
-                    Archive
-                  </button>
-                </div>
-              </div>
-
-              {/* Client Info Grid */}
-              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(280px, 1fr))', gap: '24px', marginBottom: '30px' }}>
-                <div>
-                  <h3 style={{ margin: '0 0 12px', fontSize: '0.9rem', color: '#8c7d6b', textTransform: 'uppercase', borderBottom: '1px solid rgba(37,27,20,0.06)', paddingBottom: '6px' }}>Client Contact Details</h3>
-                  <table style={{ width: '100%', fontSize: '0.95rem' }}>
-                    <tbody>
-                      <tr>
-                        <td style={{ padding: '4px 0', color: '#5f4f3b', width: '100px' }}>Name:</td>
-                        <td style={{ padding: '4px 0', fontWeight: 600, color: '#251b14' }}>{selectedQuote.name}</td>
-                      </tr>
-                      <tr>
-                        <td style={{ padding: '4px 0', color: '#5f4f3b' }}>Email:</td>
-                        <td style={{ padding: '4px 0', color: '#251b14' }}>
-                          <a href={`mailto:${selectedQuote.email}`} style={{ color: '#b5632a', textDecoration: 'none' }}>{selectedQuote.email}</a>
-                        </td>
-                      </tr>
-                      {selectedQuote.phone && (
-                        <tr>
-                          <td style={{ padding: '4px 0', color: '#5f4f3b' }}>Phone:</td>
-                          <td style={{ padding: '4px 0', color: '#251b14' }}>
-                            <a href={`tel:${selectedQuote.phone}`} style={{ color: '#b5632a', textDecoration: 'none' }}>{selectedQuote.phone}</a>
-                          </td>
-                        </tr>
-                      )}
-                      {selectedQuote.city && (
-                        <tr>
-                          <td style={{ padding: '4px 0', color: '#5f4f3b' }}>City:</td>
-                          <td style={{ padding: '4px 0', color: '#251b14' }}>{selectedQuote.city}</td>
-                        </tr>
-                      )}
-                      {selectedQuote.deliveryLocation && (
-                        <tr>
-                          <td style={{ padding: '4px 0', color: '#5f4f3b' }}>Postcode/Country:</td>
-                          <td style={{ padding: '4px 0', color: '#251b14', fontWeight: 500 }}>{selectedQuote.deliveryLocation}</td>
-                        </tr>
-                      )}
-                    </tbody>
-                  </table>
-                </div>
-
-                <div>
-                  <h3 style={{ margin: '0 0 12px', fontSize: '0.9rem', color: '#8c7d6b', textTransform: 'uppercase', borderBottom: '1px solid rgba(37,27,20,0.06)', paddingBottom: '6px' }}>Event & Gifting details</h3>
-                  <table style={{ width: '100%', fontSize: '0.95rem' }}>
-                    <tbody>
-                      {selectedQuote.eventDate && (
-                        <tr>
-                          <td style={{ padding: '4px 0', color: '#5f4f3b', width: '130px' }}>Delivery Date:</td>
-                          <td style={{ padding: '4px 0', color: '#251b14', fontWeight: 600 }}>{selectedQuote.eventDate}</td>
-                        </tr>
-                      )}
-                      <tr>
-                        <td style={{ padding: '4px 0', color: '#5f4f3b', width: '130px' }}>Occasion/Event:</td>
-                        <td style={{ padding: '4px 0', color: '#251b14', fontWeight: 500 }}>
-                          {selectedQuote.eventType || selectedQuote.occasion || 'General Curation'}
-                        </td>
-                      </tr>
-                      {selectedQuote.packaging && (
-                        <tr>
-                          <td style={{ padding: '4px 0', color: '#5f4f3b' }}>Packaging:</td>
-                          <td style={{ padding: '4px 0', color: '#b5632a', fontWeight: 500 }}>{selectedQuote.packaging}</td>
-                        </tr>
-                      )}
-                      {selectedQuote.personalisation && (
-                        <tr>
-                          <td style={{ padding: '4px 0', color: '#5f4f3b' }}>Personalisation:</td>
-                          <td style={{ padding: '4px 0', color: '#251b14' }}>{selectedQuote.personalisation}</td>
-                        </tr>
-                      )}
-                      {selectedQuote.budget && (
-                        <tr>
-                          <td style={{ padding: '4px 0', color: '#5f4f3b' }}>Est. Budget:</td>
-                          <td style={{ padding: '4px 0', color: '#251b14' }}>{selectedQuote.budget}</td>
-                        </tr>
-                      )}
-                      {selectedQuote.notes && (
-                        <tr>
-                          <td style={{ padding: '4px 0', color: '#5f4f3b' }}>Special Notes:</td>
-                          <td style={{ padding: '4px 0', color: '#251b14', fontStyle: 'italic' }}>{selectedQuote.notes}</td>
-                        </tr>
-                      )}
-                      {/* Deal Value Calculation Display */}
-                      <tr>
-                        <td style={{ padding: '4px 0', color: '#5f4f3b' }}>Est. Deal Value:</td>
-                        <td style={{ padding: '4px 0', color: '#b5632a', fontWeight: 600 }}>
-                          ₹{getQuoteValue(selectedQuote).toLocaleString('en-IN')}
-                        </td>
-                      </tr>
-                      <tr>
-                        <td style={{ padding: '4px 0', color: '#5f4f3b' }}>Quote Date:</td>
-                        <td style={{ padding: '4px 0', color: '#251b14' }}>
-                          {new Date(selectedQuote.createdAt).toLocaleString('en-US', {
-                            dateStyle: 'medium',
-                            timeStyle: 'short',
-                          })}
-                        </td>
-                      </tr>
-                    </tbody>
-                  </table>
-                </div>
-              </div>
-
-              {/* Items Selected Section */}
-              <h3 style={{ margin: '30px 0 16px', fontSize: '0.9rem', color: '#8c7d6b', textTransform: 'uppercase', borderBottom: '1px solid rgba(37,27,20,0.06)', paddingBottom: '6px' }}>
-                Items Requested ({selectedQuote.items.length})
-              </h3>
-              
-              <div style={{ display: 'grid', gridTemplateColumns: '1fr', gap: '12px' }}>
-                {selectedQuote.items.map((item, idx) => (
-                  <div 
-                    key={idx} 
-                    style={{ display: 'flex', alignItems: 'center', gap: '16px', padding: '12px', border: '1px solid rgba(37,27,20,0.06)', borderRadius: '8px', backgroundColor: '#fcfaf8' }}
-                  >
-                    <div style={{ position: 'relative', width: '60px', height: '60px', borderRadius: '4px', overflow: 'hidden', flexShrink: 0 }}>
-                      <Image src={item.image} alt={item.name} fill style={{ objectFit: 'cover' }} />
-                    </div>
-                    <div style={{ flex: 1 }}>
-                      <p style={{ margin: 0, fontWeight: 600, fontSize: '0.95rem', color: '#251b14' }}>{item.name}</p>
-                      <small style={{ color: '#8c7d6b', fontSize: '0.8rem' }}>Material: {item.material} | Category: {item.category}</small>
-                    </div>
-                    {item.quantity ? (
-                      <span style={{ fontSize: '0.85rem', color: '#b5632a', fontWeight: 700, backgroundColor: '#fdf3ed', padding: '6px 12px', borderRadius: '6px', border: '1px solid rgba(181,99,42,0.2)' }}>
-                        Qty: {item.quantity} units
-                      </span>
-                    ) : item.min ? (
-                      <span style={{ fontSize: '0.8rem', color: '#b5632a', fontWeight: 500, backgroundColor: '#fdf3ed', padding: '4px 8px', borderRadius: '4px' }}>
-                        {item.min}
-                      </span>
-                    ) : null}
-                  </div>
-                ))}
-              </div>
-            </div>
-            
-            {/* Modal Footer */}
-            <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '12px', padding: '20px 30px', borderTop: '1px solid rgba(37,27,20,0.08)', backgroundColor: '#fcfaf7' }}>
-              <button
-                onClick={() => setSelectedQuote(null)}
-                style={{ padding: '10px 20px', border: '1px solid #ced4da', borderRadius: '6px', color: '#495057', backgroundColor: '#fff', cursor: 'pointer', fontSize: '0.9rem', fontWeight: 500 }}
-              >
-                Close
-              </button>
-              <button
-                onClick={() => {
-                  deleteQuote(selectedQuote.id);
-                }}
-                style={{ padding: '10px 20px', border: '1px solid #f5c6cb', borderRadius: '6px', color: '#721c24', backgroundColor: '#f8d7da', cursor: 'pointer', fontSize: '0.9rem', fontWeight: 600 }}
-              >
-                🗑️ Delete Request
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
-      
-      {/* Custom Delete Confirmation Modal */}
-      {quoteToDelete && (
         <div
           style={{
             position: 'fixed',
             inset: 0,
             backgroundColor: 'rgba(37,27,20,0.6)',
-            zIndex: 1100, // Higher than details modal
+            zIndex: 1000,
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            padding: '24px',
+            backdropFilter: 'blur(3px)',
+          }}
+          onClick={() => setSelectedQuote(null)}
+        >
+          <div
+            style={{
+              backgroundColor: '#fff',
+              borderRadius: '16px',
+              border: '1px solid rgba(37,27,20,0.1)',
+              width: '100%',
+              maxWidth: '820px',
+              maxHeight: '90vh',
+              overflowY: 'auto',
+              boxShadow: '0 24px 48px rgba(0,0,0,0.2)',
+              display: 'flex',
+              flexDirection: 'column',
+            }}
+            onClick={(e) => e.stopPropagation()}
+          >
+            {/* Modal Header */}
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '22px 28px', borderBottom: '1px solid rgba(37,27,20,0.08)', backgroundColor: '#fdfbf9' }}>
+              <div>
+                <span style={{ fontSize: '0.75rem', fontWeight: 700, color: '#b5632a', textTransform: 'uppercase', letterSpacing: '0.08em' }}>
+                  {selectedQuote.refId ? `REF: ${selectedQuote.refId}` : `ID: ${selectedQuote.id.slice(0, 10)}`}
+                </span>
+                <h2 style={{ margin: '2px 0 0', fontFamily: 'Georgia, serif', fontSize: '1.6rem', color: '#251b14' }}>
+                  {selectedQuote.name} — Quote Enquiry
+                </h2>
+              </div>
+              <button
+                onClick={() => setSelectedQuote(null)}
+                style={{ background: 'none', border: 'none', fontSize: '1.6rem', cursor: 'pointer', color: '#8c7d6b' }}
+                aria-label="Close"
+              >
+                ✕
+              </button>
+            </div>
+
+            {/* Modal Body */}
+            <div style={{ padding: '28px', display: 'flex', flexDirection: 'column', gap: '22px' }}>
+              {/* Status Selector Bar */}
+              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: '12px', backgroundColor: '#fcfaf7', padding: '14px 18px', borderRadius: '10px', border: '1px solid rgba(37,27,20,0.06)' }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+                  <span style={{ fontSize: '0.86rem', color: '#5f4f3b', fontWeight: 600 }}>Lead Status:</span>
+                  <select
+                    value={selectedQuote.status}
+                    onChange={(e) => updateStatus(selectedQuote.id, e.target.value as LeadStatus)}
+                    style={{
+                      padding: '6px 12px',
+                      borderRadius: '8px',
+                      fontSize: '0.88rem',
+                      fontWeight: 600,
+                      backgroundColor: statusStyles[selectedQuote.status]?.bg || '#fff',
+                      color: statusStyles[selectedQuote.status]?.color || '#251b14',
+                      border: `1px solid ${statusStyles[selectedQuote.status]?.border || '#d1d5db'}`,
+                    }}
+                  >
+                    {ALL_STATUSES.map((st) => (
+                      <option key={st} value={st}>
+                        {st}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+
+                {/* Direct Contact Buttons */}
+                <div style={{ display: 'flex', gap: '8px' }}>
+                  <a
+                    href={`mailto:${selectedQuote.email}?subject=Your%20Hands%20of%20Heritage%20Quote%20Request%20[Ref:%20${selectedQuote.refId || selectedQuote.id}]`}
+                    style={{
+                      padding: '8px 14px',
+                      backgroundColor: '#fff',
+                      border: '1px solid #c5b6a5',
+                      borderRadius: '6px',
+                      fontSize: '0.82rem',
+                      fontWeight: 600,
+                      color: '#251b14',
+                      textDecoration: 'none',
+                    }}
+                  >
+                    ✉️ Email Client
+                  </a>
+
+                  {selectedQuote.phone && (
+                    <a
+                      href={`https://wa.me/${selectedQuote.phone.replace(/[^0-9]/g, '')}?text=${encodeURIComponent(`Hi ${selectedQuote.name}, thank you for your enquiry with Hands of Heritage regarding reference ${selectedQuote.refId || ''}.`)}`}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      style={{
+                        padding: '8px 14px',
+                        backgroundColor: '#25D366',
+                        color: '#fff',
+                        borderRadius: '6px',
+                        fontSize: '0.82rem',
+                        fontWeight: 700,
+                        textDecoration: 'none',
+                      }}
+                    >
+                      💬 WhatsApp
+                    </a>
+                  )}
+                </div>
+              </div>
+
+              {/* Internal CRM & Ownership Box (Latika & Karan) */}
+              <div
+                style={{
+                  backgroundColor: '#ffffff',
+                  border: '1.5px solid #b5632a',
+                  borderRadius: '12px',
+                  padding: '18px 20px',
+                  boxShadow: '0 2px 8px rgba(181, 99, 42, 0.04)',
+                }}
+              >
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '14px' }}>
+                  <h4 style={{ margin: 0, fontSize: '0.88rem', textTransform: 'uppercase', letterSpacing: '0.06em', color: '#b5632a', fontWeight: 700 }}>
+                    Internal Lead Management (Latika & Karan)
+                  </h4>
+                  <button
+                    type="button"
+                    onClick={saveCrmDetails}
+                    disabled={isSavingCrm}
+                    style={{
+                      backgroundColor: '#b5632a',
+                      color: '#fff',
+                      border: 'none',
+                      padding: '6px 14px',
+                      borderRadius: '6px',
+                      fontSize: '0.8rem',
+                      fontWeight: 600,
+                      cursor: 'pointer',
+                    }}
+                  >
+                    {isSavingCrm ? 'Saving...' : '💾 Save Follow-up Details'}
+                  </button>
+                </div>
+
+                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: '14px' }}>
+                  <div>
+                    <label style={{ fontSize: '0.78rem', fontWeight: 600, color: '#5f4f3b', display: 'block', marginBottom: '4px' }}>
+                      Lead Owner
+                    </label>
+                    <select
+                      value={crmOwner}
+                      onChange={(e) => setCrmOwner(e.target.value)}
+                      style={{ width: '100%', padding: '7px 10px', borderRadius: '6px', border: '1px solid #d1d5db', fontSize: '0.86rem', backgroundColor: '#fff' }}
+                    >
+                      <option value="Unassigned">Unassigned</option>
+                      <option value="Latika">Latika</option>
+                      <option value="Karan">Karan</option>
+                    </select>
+                  </div>
+
+                  <div>
+                    <label style={{ fontSize: '0.78rem', fontWeight: 600, color: '#5f4f3b', display: 'block', marginBottom: '4px' }}>
+                      Next Action
+                    </label>
+                    <input
+                      type="text"
+                      placeholder="e.g. Send formal pricing quote PDF"
+                      value={crmNextAction}
+                      onChange={(e) => setCrmNextAction(e.target.value)}
+                      style={{ width: '100%', padding: '7px 10px', borderRadius: '6px', border: '1px solid #d1d5db', fontSize: '0.86rem' }}
+                    />
+                  </div>
+
+                  <div>
+                    <label style={{ fontSize: '0.78rem', fontWeight: 600, color: '#5f4f3b', display: 'block', marginBottom: '4px' }}>
+                      Follow-up Date
+                    </label>
+                    <input
+                      type="date"
+                      value={crmFollowUpDate}
+                      onChange={(e) => setCrmFollowUpDate(e.target.value)}
+                      style={{ width: '100%', padding: '7px 10px', borderRadius: '6px', border: '1px solid #d1d5db', fontSize: '0.86rem' }}
+                    />
+                  </div>
+                </div>
+
+                <div style={{ marginTop: '12px' }}>
+                  <label style={{ fontSize: '0.78rem', fontWeight: 600, color: '#5f4f3b', display: 'block', marginBottom: '4px' }}>
+                    Internal Team Notes (Private)
+                  </label>
+                  <textarea
+                    rows={2}
+                    placeholder="Log conversations, discount discussions, custom packaging preferences..."
+                    value={crmInternalNotes}
+                    onChange={(e) => setCrmInternalNotes(e.target.value)}
+                    style={{ width: '100%', padding: '8px 10px', borderRadius: '6px', border: '1px solid #d1d5db', fontSize: '0.86rem', resize: 'vertical' }}
+                  />
+                </div>
+              </div>
+
+              {/* Client & Event Details Grid */}
+              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(320px, 1fr))', gap: '20px' }}>
+                <div style={{ backgroundColor: '#fcfaf7', padding: '18px', borderRadius: '10px', border: '1px solid rgba(37,27,20,0.06)' }}>
+                  <h4 style={{ margin: '0 0 10px', fontSize: '0.85rem', color: '#7c6950', textTransform: 'uppercase' }}>Client Information</h4>
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: '6px', fontSize: '0.9rem' }}>
+                    <div><strong>Name:</strong> {selectedQuote.name}</div>
+                    <div><strong>Email:</strong> <a href={`mailto:${selectedQuote.email}`} style={{ color: '#b5632a' }}>{selectedQuote.email}</a></div>
+                    {selectedQuote.phone && (
+                      <div>
+                        <strong>Phone:</strong> <a href={`tel:${selectedQuote.phone}`} style={{ color: '#b5632a' }}>{selectedQuote.phone}</a>
+                      </div>
+                    )}
+                    <div><strong>Destination / Postcode:</strong> {selectedQuote.deliveryLocation || selectedQuote.city || 'Not provided'}</div>
+                  </div>
+                </div>
+
+                <div style={{ backgroundColor: '#fcfaf7', padding: '18px', borderRadius: '10px', border: '1px solid rgba(37,27,20,0.06)' }}>
+                  <h4 style={{ margin: '0 0 10px', fontSize: '0.85rem', color: '#7c6950', textTransform: 'uppercase' }}>Gifting Requirements</h4>
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: '6px', fontSize: '0.9rem' }}>
+                    <div><strong>Occasion:</strong> {selectedQuote.eventType || selectedQuote.occasion || 'Wedding / Celebration'}</div>
+                    <div><strong>Required Delivery Date:</strong> {selectedQuote.eventDate || 'To be scheduled'}</div>
+                    <div><strong>Packaging Selection:</strong> {selectedQuote.packaging || 'Standard'}</div>
+                    {selectedQuote.personalisation && <div><strong>Personalisation:</strong> {selectedQuote.personalisation}</div>}
+                    {selectedQuote.budget && <div><strong>Budget:</strong> {selectedQuote.budget}</div>}
+                    {selectedQuote.notes && <div><strong>Client Notes:</strong> <em>{selectedQuote.notes}</em></div>}
+                  </div>
+                </div>
+              </div>
+
+              {/* Products Itemized Table */}
+              <div>
+                <h4 style={{ margin: '0 0 12px', fontSize: '0.88rem', textTransform: 'uppercase', color: '#7c6950' }}>
+                  Requested Products & Quantities ({selectedQuote.items.length} {selectedQuote.items.length === 1 ? 'line' : 'lines'})
+                </h4>
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
+                  {selectedQuote.items.map((item, idx) => (
+                    <div
+                      key={idx}
+                      style={{
+                        display: 'flex',
+                        alignItems: 'center',
+                        justifyContent: 'space-between',
+                        padding: '12px 16px',
+                        border: '1px solid rgba(37,27,20,0.08)',
+                        borderRadius: '10px',
+                        backgroundColor: '#fff',
+                      }}
+                    >
+                      <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+                        <div style={{ position: 'relative', width: '48px', height: '48px', borderRadius: '6px', overflow: 'hidden', flexShrink: 0 }}>
+                          <Image src={item.image} alt={item.name} fill style={{ objectFit: 'cover' }} />
+                        </div>
+                        <div>
+                          <strong style={{ fontSize: '0.94rem', color: '#251b14', display: 'block' }}>{item.name}</strong>
+                          <small style={{ color: '#7c6950', fontSize: '0.8rem' }}>{item.material} • {item.category}</small>
+                        </div>
+                      </div>
+                      <span
+                        style={{
+                          fontSize: '0.9rem',
+                          fontWeight: 700,
+                          color: '#b5632a',
+                          backgroundColor: '#fbf4ee',
+                          padding: '6px 14px',
+                          borderRadius: '8px',
+                          border: '1px solid rgba(181,99,42,0.2)',
+                        }}
+                      >
+                        {item.quantity || 1} units
+                      </span>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            </div>
+
+            {/* Modal Footer */}
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '16px 28px', borderTop: '1px solid rgba(37,27,20,0.08)', backgroundColor: '#fcfaf7' }}>
+              <button
+                type="button"
+                onClick={() => setQuoteToDelete(selectedQuote.id)}
+                style={{
+                  padding: '8px 16px',
+                  backgroundColor: '#fee2e2',
+                  border: '1px solid #fecaca',
+                  borderRadius: '6px',
+                  color: '#991b1b',
+                  fontSize: '0.85rem',
+                  fontWeight: 600,
+                  cursor: 'pointer',
+                }}
+              >
+                🗑️ Permanently Delete Record
+              </button>
+
+              <button
+                type="button"
+                onClick={() => setSelectedQuote(null)}
+                style={{
+                  padding: '8px 20px',
+                  backgroundColor: '#251b14',
+                  color: '#fff',
+                  border: 'none',
+                  borderRadius: '6px',
+                  fontSize: '0.85rem',
+                  fontWeight: 600,
+                  cursor: 'pointer',
+                }}
+              >
+                Close
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* DELETE CONFIRMATION MODAL (GDPR COMPLIANT ERASURE) */}
+      {quoteToDelete && (
+        <div
+          style={{
+            position: 'fixed',
+            inset: 0,
+            backgroundColor: 'rgba(0,0,0,0.6)',
+            zIndex: 1100,
             display: 'flex',
             alignItems: 'center',
             justifyContent: 'center',
             padding: '20px',
-            backdropFilter: 'blur(4px)',
           }}
           onClick={() => setQuoteToDelete(null)}
         >
@@ -1138,39 +1341,23 @@ export default function AdminDashboard() {
             style={{
               backgroundColor: '#fff',
               borderRadius: '12px',
-              border: '1px solid rgba(37,27,20,0.1)',
+              padding: '24px',
+              maxWidth: '440px',
               width: '100%',
-              maxWidth: '450px',
-              padding: '30px',
-              boxShadow: '0 20px 40px rgba(0,0,0,0.2)',
               display: 'flex',
               flexDirection: 'column',
-              gap: '20px',
+              gap: '14px',
             }}
             onClick={(e) => e.stopPropagation()}
           >
-            <div style={{ display: 'flex', alignItems: 'center', gap: '12px', color: '#c53030' }}>
-              <span style={{ fontSize: '2rem' }}>⚠️</span>
-              <h3 style={{ margin: 0, fontFamily: 'Georgia, serif', fontSize: '1.25rem', fontWeight: 'normal' }}>
-                Confirm Delete
-              </h3>
-            </div>
-            <p style={{ margin: 0, fontSize: '0.95rem', color: '#5f4f3b', lineHeight: 1.5 }}>
-              Are you sure you want to permanently delete this quote request? This action cannot be undone.
+            <h3 style={{ margin: 0, color: '#991b1b', fontSize: '1.2rem' }}>Confirm Permanent Deletion</h3>
+            <p style={{ margin: 0, fontSize: '0.9rem', color: '#5f4f3b', lineHeight: 1.5 }}>
+              Are you sure you want to permanently erase this enquiry record? This purges the document from Google Cloud Firestore and cannot be undone (GDPR right-to-erasure compliant).
             </p>
-            <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '12px', marginTop: '10px' }}>
+            <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '10px', marginTop: '8px' }}>
               <button
                 onClick={() => setQuoteToDelete(null)}
-                style={{
-                  padding: '8px 16px',
-                  border: '1px solid #ced4da',
-                  borderRadius: '6px',
-                  color: '#495057',
-                  backgroundColor: '#fff',
-                  cursor: 'pointer',
-                  fontSize: '0.9rem',
-                  fontWeight: 500,
-                }}
+                style={{ padding: '8px 14px', border: '1px solid #ccc', borderRadius: '6px', background: '#fff', cursor: 'pointer' }}
               >
                 Cancel
               </button>
@@ -1180,34 +1367,76 @@ export default function AdminDashboard() {
                   setQuoteToDelete(null);
                   await executeDelete(id);
                 }}
-                style={{
-                  padding: '8px 16px',
-                  border: 'none',
-                  borderRadius: '6px',
-                  color: '#fff',
-                  backgroundColor: '#c53030',
-                  cursor: 'pointer',
-                  fontSize: '0.9rem',
-                  fontWeight: 600,
-                  transition: 'background-color 0.2s',
-                }}
-                onMouseEnter={(e) => (e.currentTarget.style.backgroundColor = '#9b1c1c')}
-                onMouseLeave={(e) => (e.currentTarget.style.backgroundColor = '#c53030')}
+                style={{ padding: '8px 16px', border: 'none', borderRadius: '6px', background: '#dc2626', color: '#fff', fontWeight: 600, cursor: 'pointer' }}
               >
-                Delete
+                Permanently Delete
               </button>
             </div>
           </div>
         </div>
       )}
-      
-      {/* Keyframe animation for spinner */}
-      <style jsx global>{`
-        @keyframes spin {
-          0% { transform: rotate(0deg); }
-          100% { transform: rotate(360deg); }
-        }
-      `}</style>
+
+      {/* SECURITY & DATA PROTECTION MODAL */}
+      {showSecurityModal && (
+        <div
+          style={{
+            position: 'fixed',
+            inset: 0,
+            backgroundColor: 'rgba(0,0,0,0.6)',
+            zIndex: 1100,
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            padding: '20px',
+          }}
+          onClick={() => setShowSecurityModal(false)}
+        >
+          <div
+            style={{
+              backgroundColor: '#fff',
+              borderRadius: '16px',
+              padding: '28px',
+              maxWidth: '580px',
+              width: '100%',
+              display: 'flex',
+              flexDirection: 'column',
+              gap: '16px',
+              boxShadow: '0 20px 40px rgba(0,0,0,0.2)',
+            }}
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+              <h3 style={{ margin: 0, fontFamily: 'Georgia, serif', fontSize: '1.4rem', color: '#251b14' }}>
+                Customer Data Security & Storage Policy
+              </h3>
+              <button onClick={() => setShowSecurityModal(false)} style={{ background: 'none', border: 'none', fontSize: '1.4rem', cursor: 'pointer' }}>✕</button>
+            </div>
+
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '12px', fontSize: '0.88rem', color: '#4a3b2c', lineHeight: 1.6 }}>
+              <div>
+                <strong>🔒 Storage & Encryption:</strong> All quote requests and customer contact details are stored in Google Firebase Firestore. Data is encrypted at rest using AES-256 and encrypted in transit via TLS 1.3 / HTTPS.
+              </div>
+              <div>
+                <strong>🔑 Access Control:</strong> Only authorized administrators (Latika and Karan) with authenticated credentials can view, update or download enquiries.
+              </div>
+              <div>
+                <strong>💾 Backups & Redundancy:</strong> Customer enquiries are replicated in real time across Google Cloud multi-region infrastructure. You can also download complete offline backups anytime using the <strong>Export CSV</strong> button.
+              </div>
+              <div>
+                <strong>🗑️ Permanent Deletion (GDPR):</strong> Clicking &quot;Permanently Delete Record&quot; instantly erases the enquiry and its personal details from the database without retaining residual logs.
+              </div>
+            </div>
+
+            <button
+              onClick={() => setShowSecurityModal(false)}
+              className="button-primary"
+              style={{ padding: '10px', marginTop: '8px', alignSelf: 'flex-end', fontSize: '0.88rem' }}
+            >
+              Understood
+            </button>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

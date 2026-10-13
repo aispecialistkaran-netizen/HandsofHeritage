@@ -121,6 +121,21 @@ a.brand-mark {
   color: #b5632a;
 }
 
+.header-nav a.nav-primary {
+  font-weight: 500;
+  color: #251b14;
+}
+
+.header-nav a.nav-secondary {
+  color: #8c765c;
+  padding-left: 12px;
+  border-left: 1px solid rgba(34, 24, 14, 0.15);
+}
+
+.header-nav a.nav-secondary:hover {
+  color: #b5632a;
+}
+
 .nav-cta {
   position: relative;
   display: inline-flex;
