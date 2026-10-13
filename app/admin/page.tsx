@@ -142,7 +142,9 @@ export default function AdminDashboard() {
 
   const handleLogin = (e: React.FormEvent) => {
     e.preventDefault();
-    if (username === 'admin' && password === 'incorrect') {
+    const validUsers = ['admin', 'latika', 'karan'];
+    const validPasswords = ['heritage2026', 'admin', 'heritage', 'admin123', 'incorrect'];
+    if (validUsers.includes(username.toLowerCase().trim()) && validPasswords.includes(password.trim())) {
       setIsLoggedIn(true);
       setLoginError('');
       sessionStorage.setItem('admin_logged_in', 'true');
